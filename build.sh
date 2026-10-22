@@ -101,6 +101,17 @@ LIVE_DATA_DIR="$LAD/$APP"
 DOTNET_DIR="$LAD/Microsoft/dotnet"
 EXE_NAME="$APP.exe"
 
+# Claude Code only auto-detects Git Bash under Program Files. Point the build's
+# sessions at a per-user install so they get a Bash tool (PowerShell is denied).
+if [[ -z "${CLAUDE_CODE_GIT_BASH_PATH:-}" ]]; then
+  for gb in "$LAD/Programs/Git/bin/bash.exe" "/c/Program Files/Git/bin/bash.exe"; do
+    if [[ -f "$gb" ]]; then CLAUDE_CODE_GIT_BASH_PATH="$(cygpath -w "$gb")"; break; fi
+  done
+fi
+[[ -n "${CLAUDE_CODE_GIT_BASH_PATH:-}" && -f "$(cygpath -u "$CLAUDE_CODE_GIT_BASH_PATH")" ]] \
+  || die "Git Bash not found. Install Git for Windows, or set CLAUDE_CODE_GIT_BASH_PATH to its bin\\bash.exe."
+export CLAUDE_CODE_GIT_BASH_PATH
+
 # ── Arguments ────────────────────────────────────────────────────────────────
 FROM=""; ONLY=""; INTERACTIVE=0; DRY_RUN=0; APPROVE_INSTALL=0; APPROVE_STARTUP=0
 phase_arg() { [[ "${2:-}" =~ ^[0-9]+$ ]] && (( 10#$2 <= LAST_PHASE )) || die "$1 needs a phase number 0-$LAST_PHASE"; echo $((10#$2)); }
@@ -505,10 +516,12 @@ probe_claude() {
   local out rc=0
   claude_args
   out=$( cd "$ROOT" && export ENABLE_CLAUDEAI_MCP_SERVERS=false \
-         && printf 'Reply with exactly the word READY and nothing else.' | claude "${CLAUDE_ARGS[@]}" 2>&1 ) || rc=$?
+         && printf 'Use the Bash tool to run: git --version\nThen reply with the word READY followed by that command'"'"'s exact output. If you have no Bash tool, reply with exactly NO_BASH.' | claude "${CLAUDE_ARGS[@]}" 2>&1 ) || rc=$?
   [[ $rc -eq 0 && "$out" == *READY* ]] || die "Claude check failed (model '$MODEL', mode '$PERMISSION_MODE'):
 $out"
-  ok "Claude ready ($MODEL, $PERMISSION_MODE)"
+  [[ "$out" == *"git version"* ]] || die "Claude sessions have no working Bash tool (Git Bash: $CLAUDE_CODE_GIT_BASH_PATH). Phases need it to run dotnet and git:
+$out"
+  ok "Claude ready ($MODEL, $PERMISSION_MODE, Bash tool OK)"
 }
 
 # ── Phases 1–6 ───────────────────────────────────────────────────────────────
