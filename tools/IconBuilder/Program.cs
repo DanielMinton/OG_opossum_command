@@ -1,5 +1,7 @@
 // Throwaway icon builder: turns one large transparent PNG into the app's .ico and the PNGs Power Apps / Teams want.
-// Usage: IconBuilder <source.png> <outDir> [faceX faceY faceSize]
+// Usage: IconBuilder <source.png> <outDir> [cropX cropY cropSize]
+// By default every size uses the full artwork, so the icon looks the same everywhere (ADR-056).
+// Passing a crop uses that close-up for 16-32 px instead (kept only for experiments).
 using System.IO;
 using System.Windows;
 using System.Windows.Media;
@@ -55,7 +57,8 @@ internal static class Program
 
         // ICO: small sizes from the face, large sizes from the full picture. PNG-compressed entries.
         var entries = new List<(int Size, byte[] Png)>();
-        foreach (var s in small) entries.Add((s, Png(Face(src, face, s))));
+        var useCrop = args.Length >= 5;
+        foreach (var s in small) entries.Add((s, Png(useCrop ? Face(src, face, s) : Full(src, fullSquare, s))));
         foreach (var s in large) entries.Add((s, Png(Full(src, fullSquare, s))));
         WriteIco(Path.Combine(outDir, "app.ico"), entries);
 

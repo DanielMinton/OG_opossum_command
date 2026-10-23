@@ -6,8 +6,8 @@ All notable changes to OG Opossum Command Central. Versions follow [SemVer](http
 
 ### Added
 
-- **App icon** (ADR-056): your opossum artwork on the program, taskbar, window and tray (the
-  Microsoft 365 hexagon at small sizes so it stays readable), plus PNGs for the Hub in `assets/branding/`.
+- **App icon** (ADR-056): your opossum artwork, the same at every size, on the program, taskbar,
+  window and tray, plus PNGs for the Hub in `assets/branding/`.
 
 ## 0.2.0 — 2026-10-23
 

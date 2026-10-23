@@ -10,6 +10,6 @@ To regenerate after changing the artwork:
 
     dotnet run --project tools/IconBuilder -- "<full path to source png>" "<output folder>" [cropX cropY cropSize]
 
-The three optional numbers choose the close-up of the Microsoft 365 hexagon used for the 16 to 32 px sizes (default 215 300 900).
+Every size uses the full artwork. The three optional numbers are only for experiments: they swap in a close-up for the 16 to 32 px sizes.
 The artwork contains Microsoft 365 and OneDrive logos. Fine for your PC and inside YMCA; replace that
 part before using the icon anywhere public (ADR-056).
