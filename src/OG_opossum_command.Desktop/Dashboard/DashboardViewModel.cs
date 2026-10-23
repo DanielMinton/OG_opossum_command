@@ -53,7 +53,7 @@ public sealed partial class DashboardViewModel : ObservableObject
 
     /// <summary>The run shown in the Active execution panel, or <c>null</c>.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasActiveRun), nameof(ActiveTitle), nameof(ActiveProgress))]
+    [NotifyPropertyChangedFor(nameof(HasActiveRun), nameof(CanCancel), nameof(ActiveTitle), nameof(ActiveProgress))]
     [NotifyCanExecuteChangedFor(nameof(CancelCommand))]
     public partial ExecutionSnapshot? ActiveRun { get; set; }
 
@@ -68,6 +68,9 @@ public sealed partial class DashboardViewModel : ObservableObject
     public partial bool HasLoadErrors { get; set; }
 
     public bool HasActiveRun => ActiveRun is not null;
+
+    /// <summary>Cancel is only offered while the shown run can still be stopped; a finished run stays visible with Cancel disabled.</summary>
+    public bool CanCancel => ActiveRun?.IsActive == true;
 
     public string ActiveTitle => ActiveRun?.WorkflowName ?? string.Empty;
 
@@ -154,7 +157,7 @@ public sealed partial class DashboardViewModel : ObservableObject
         }
     }
 
-    [RelayCommand(CanExecute = nameof(HasActiveRun))]
+    [RelayCommand(CanExecute = nameof(CanCancel))]
     private void Cancel()
     {
         if (ActiveRun is { } run && _host.Engine.Cancel(run.Id))
