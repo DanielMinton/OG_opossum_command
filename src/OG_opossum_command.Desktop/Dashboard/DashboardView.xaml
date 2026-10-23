@@ -41,13 +41,14 @@
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <Border Grid.Column="0" Width="36" Height="36" CornerRadius="18" Margin="0,0,12,0"
-                                    VerticalAlignment="Center"
-                                    Background="{DynamicResource AccentFillColorDefaultBrush}">
-                                <TextBlock Text="&#xE768;" FontFamily="{StaticResource OgocIconFont}" FontSize="14"
+                            <!-- Badge and glyph grow with FontScale (ADR-047). -->
+                            <Grid Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
+                                <Ellipse Width="{DynamicResource OgocBadgeSize}" Height="{DynamicResource OgocBadgeSize}"
+                                         Fill="{DynamicResource AccentFillColorDefaultBrush}" />
+                                <TextBlock Text="&#xE768;" FontFamily="{StaticResource OgocIconFont}" FontSize="{DynamicResource OgocBodySize}"
                                            HorizontalAlignment="Center" VerticalAlignment="Center" Margin="2,0,0,0"
                                            Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
-                            </Border>
+                            </Grid>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                 <TextBlock Text="{Binding Name}" TextWrapping="Wrap"
                                            FontSize="{DynamicResource OgocLargeSize}" FontWeight="SemiBold" />
@@ -72,7 +73,7 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0">
-                    <TextBlock Style="{StaticResource OgocHeading}" Text="Running now" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                    <TextBlock Style="{StaticResource OgocHeading}" Text="Running now" />
                     <TextBlock Text="{Binding ActiveHeadline}" TextWrapping="Wrap" FontSize="{DynamicResource OgocLargeSize}" FontWeight="SemiBold" a11y:LiveRegion.Announce="True" />
                     <ProgressBar IsIndeterminate="True" Height="4" Margin="0,8,0,4" AutomationProperties.Name="Run in progress" />
                     <ItemsControl ItemsSource="{Binding ActiveSteps}" Margin="0,4,0,0" Focusable="False">
@@ -122,7 +123,7 @@
                 AutomationProperties.Name="Runs that need attention">
             <StackPanel>
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
-                    <TextBlock Style="{StaticResource OgocIcon}" Text="&#xEA39;" Margin="0,0,8,8" Foreground="{DynamicResource SystemFillColorCriticalBrush}" />
+                    <TextBlock Style="{StaticResource OgocIcon}" Text="&#xEA39;" Margin="0,0,8,8" AutomationProperties.Name="Warning" Foreground="{DynamicResource SystemFillColorCriticalBrush}" />
                     <TextBlock Style="{StaticResource OgocHeading}" Text="Needs attention" />
                 </StackPanel>
                 <TextBlock Style="{StaticResource OgocCaption}" Text="The app stopped while these were running." Margin="0,0,0,8" />
@@ -181,7 +182,7 @@
                             AutomationProperties.Name="Refresh today's calendar and carryovers"
                             AutomationProperties.HelpText="Reads the calendar file and the carryovers file again">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Style="{StaticResource OgocIcon}" Text="&#xE72C;" FontSize="13" Margin="0,0,8,0" />
+                            <TextBlock Style="{StaticResource OgocIcon}" Text="&#xE72C;" FontSize="{DynamicResource OgocHeadingSize}" Margin="0,0,8,0" />
                             <AccessText Text="_Refresh" />
                         </StackPanel>
                     </Button>
@@ -205,7 +206,7 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{Binding Time}" FontFamily="{StaticResource OgocMonoFont}" VerticalAlignment="Center" Margin="0,0,16,0"
-                                           Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                                           Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
                                 <TextBlock Grid.Column="1" VerticalAlignment="Center" TextWrapping="Wrap">
                                     <Run Text="{Binding Subject, Mode=OneWay}" />
                                     <Run Text="{Binding Detail, Mode=OneWay}" FontSize="{DynamicResource OgocSmallSize}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />

@@ -9,6 +9,16 @@ All notable changes to OG Opossum Command Central. Versions follow [SemVer](http
 - **App icon** (ADR-056): your opossum artwork, the same at every size, on the program, taskbar,
   window and tray, plus PNGs for the Hub in `assets/branding/`.
 
+### Fixed
+
+- **High contrast** (ADR-055): "Running now" and the times in Today were in the accent colour,
+  which stays the same under a contrast theme and could be unreadable. They now use the normal
+  text colour.
+- **Large text** (ADR-055): the navigation rail widens with text size instead of cutting off
+  "Command palette" and the other labels; icons and the tile badges grow with the text.
+- **Narrator** (ADR-055): the warning icon in Needs attention is read as "Warning".
+- **Icon tool** (ADR-056): `tools/IconBuilder` builds again under the repo's analyzer rules.
+
 ## 0.2.0 — 2026-10-23
 
 Phases 8-9: exports and alerts through your work OneDrive. Still no network calls, sign-in, or

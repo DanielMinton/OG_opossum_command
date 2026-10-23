@@ -19,7 +19,8 @@
          No window Background: the Fluent theme paints it (Mica on Windows 11). -->
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="208" />
+            <!-- Auto: the rail widens with text scaling instead of clipping its labels (ADR-055). -->
+            <ColumnDefinition Width="Auto" MinWidth="208" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 

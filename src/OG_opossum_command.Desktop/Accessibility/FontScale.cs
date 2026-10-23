@@ -20,6 +20,7 @@ internal static class FontScale
         ("OgocLargeSize", 16),
         ("OgocTitleSize", 20),
         ("OgocDisplaySize", 28),
+        ("OgocBadgeSize", 36), // not a font: the tile badge diameter, so its glyph still fits
     ];
 
     /// <summary>Applies the current scale to the app resources and keeps it current until the app exits.</summary>

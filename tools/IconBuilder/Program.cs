@@ -2,6 +2,7 @@
 // Usage: IconBuilder <source.png> <outDir> [cropX cropY cropSize]
 // By default every size uses the full artwork, so the icon looks the same everywhere (ADR-056).
 // Passing a crop uses that close-up for 16-32 px instead (kept only for experiments).
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Media;
@@ -21,7 +22,8 @@ internal static class Program
         var outDir = args[1];
         Directory.CreateDirectory(outDir);
         var face = args.Length >= 5
-            ? new Int32Rect(int.Parse(args[2]), int.Parse(args[3]), int.Parse(args[4]), int.Parse(args[4]))
+            ? new Int32Rect(int.Parse(args[2], CultureInfo.InvariantCulture), int.Parse(args[3], CultureInfo.InvariantCulture),
+                int.Parse(args[4], CultureInfo.InvariantCulture), int.Parse(args[4], CultureInfo.InvariantCulture))
             : new Int32Rect(215, 300, 900, 900);
 
         // Full picture centred in a square, in source pixels.
@@ -70,7 +72,7 @@ internal static class Program
         return 0;
     }
 
-    private static BitmapSource Full(BitmapSource src, Rect fromPx, int size)
+    private static RenderTargetBitmap Full(BitmapSource src, Rect fromPx, int size)
     {
         var v = new DrawingVisual();
         RenderOptions.SetBitmapScalingMode(v, BitmapScalingMode.Fant);
@@ -85,7 +87,7 @@ internal static class Program
         return Render(v, size, size);
     }
 
-    private static BitmapSource Face(BitmapSource src, Int32Rect face, int size)
+    private static RenderTargetBitmap Face(BitmapSource src, Int32Rect face, int size)
     {
         var v = new DrawingVisual();
         RenderOptions.SetBitmapScalingMode(v, BitmapScalingMode.Fant);

@@ -9,7 +9,9 @@
              ShutdownMode="OnExplicitShutdown">
     <!-- No StartupUri: Program.Main decides whether a window is shown at all. -->
     <!-- ThemeMode="System": the built-in Windows 11 (Fluent) theme follows light, dark and high contrast (ADR-055).
-         Colours below come from the Fluent brushes, which map to system colours under high contrast. -->
+         Colours below come from the Fluent brushes. The text, card and fill brushes map to system colours under high
+         contrast; the Accent* brushes keep the user's accent even then, so they are used only for borders and badges,
+         never for text. -->
     <Application.Resources>
 
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
@@ -21,6 +23,8 @@
         <sys:Double x:Key="OgocLargeSize">16</sys:Double>
         <sys:Double x:Key="OgocTitleSize">20</sys:Double>
         <sys:Double x:Key="OgocDisplaySize">28</sys:Double>
+        <!-- Not a font: the tile badge diameter, scaled with the text so its glyph always fits. -->
+        <sys:Double x:Key="OgocBadgeSize">36</sys:Double>
 
         <FontFamily x:Key="OgocIconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
         <FontFamily x:Key="OgocMonoFont">Cascadia Mono, Consolas</FontFamily>
@@ -170,7 +174,7 @@
 
         <Style x:Key="OgocIcon" TargetType="TextBlock">
             <Setter Property="FontFamily" Value="{StaticResource OgocIconFont}" />
-            <Setter Property="FontSize" Value="16" />
+            <Setter Property="FontSize" Value="{DynamicResource OgocLargeSize}" />
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Margin" Value="0,0,12,0" />
         </Style>
