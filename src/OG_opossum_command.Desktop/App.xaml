@@ -5,8 +5,11 @@
              xmlns:history="clr-namespace:OG_opossum_command.Desktop.History"
              xmlns:settings="clr-namespace:OG_opossum_command.Desktop.Settings"
              xmlns:sys="clr-namespace:System;assembly=System.Runtime"
+             ThemeMode="System"
              ShutdownMode="OnExplicitShutdown">
     <!-- No StartupUri: Program.Main decides whether a window is shown at all. -->
+    <!-- ThemeMode="System": the built-in Windows 11 (Fluent) theme follows light, dark and high contrast (ADR-055).
+         Colours below come from the Fluent brushes, which map to system colours under high contrast. -->
     <Application.Resources>
 
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
@@ -17,15 +20,20 @@
         <sys:Double x:Key="OgocHeadingSize">13</sys:Double>
         <sys:Double x:Key="OgocLargeSize">16</sys:Double>
         <sys:Double x:Key="OgocTitleSize">20</sys:Double>
+        <sys:Double x:Key="OgocDisplaySize">28</sys:Double>
+
+        <FontFamily x:Key="OgocIconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+        <FontFamily x:Key="OgocMonoFont">Cascadia Mono, Consolas</FontFamily>
 
         <!-- Focus ring for list rows: inside the row so neighbours do not overlap it. -->
         <Style x:Key="OgocItemFocusVisual">
             <Setter Property="Control.Template">
                 <Setter.Value>
                     <ControlTemplate>
-                        <Rectangle StrokeThickness="2"
-                                   Stroke="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}"
-                                   SnapsToDevicePixels="True" />
+                        <Border BorderThickness="2"
+                                CornerRadius="4"
+                                BorderBrush="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}"
+                                SnapsToDevicePixels="True" />
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -39,60 +47,164 @@
             <Setter Property="FocusVisualStyle" Value="{StaticResource OgocItemFocusVisual}" />
         </Style>
 
-        <!-- Colours come from SystemColors so Windows high-contrast themes apply automatically. -->
+        <!-- Keyboard focus ring: a thick system highlight outline, outside the control. -->
         <Style x:Key="OgocFocusVisual">
             <Setter Property="Control.Template">
                 <Setter.Value>
                     <ControlTemplate>
-                        <Rectangle Margin="-3"
-                                   StrokeThickness="3"
-                                   Stroke="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}"
-                                   SnapsToDevicePixels="True" />
+                        <Border Margin="-3"
+                                BorderThickness="2"
+                                CornerRadius="7"
+                                BorderBrush="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}"
+                                SnapsToDevicePixels="True" />
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
 
-        <Style x:Key="OgocButton" TargetType="Button">
+        <!-- Buttons: the Fluent button, with the app's focus ring, size and font scale. -->
+        <Style x:Key="OgocButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
             <Setter Property="FocusVisualStyle" Value="{StaticResource OgocFocusVisual}" />
-            <Setter Property="Padding" Value="14,8" />
-            <Setter Property="MinHeight" Value="36" />
+            <Setter Property="Padding" Value="14,6" />
+            <Setter Property="MinHeight" Value="32" />
             <Setter Property="FontSize" Value="{DynamicResource OgocBodySize}" />
-            <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}" />
-            <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}" />
         </Style>
 
-        <Style x:Key="OgocTile" TargetType="Button" BasedOn="{StaticResource OgocButton}">
-            <Setter Property="MinHeight" Value="84" />
-            <Setter Property="Margin" Value="6" />
-            <Setter Property="FontSize" Value="{DynamicResource OgocLargeSize}" />
+        <Style x:Key="OgocAccentButton" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
+            <Setter Property="FocusVisualStyle" Value="{StaticResource OgocFocusVisual}" />
+            <Setter Property="Padding" Value="14,6" />
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="FontSize" Value="{DynamicResource OgocBodySize}" />
+        </Style>
+
+        <Style x:Key="OgocCancel" TargetType="Button" BasedOn="{StaticResource OgocAccentButton}">
             <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="HorizontalContentAlignment" Value="Center" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-        </Style>
-
-        <Style x:Key="OgocCancel" TargetType="Button" BasedOn="{StaticResource OgocButton}">
-            <Setter Property="FontWeight" Value="Bold" />
             <Setter Property="MinWidth" Value="120" />
             <Setter Property="MinHeight" Value="44" />
-            <Setter Property="BorderThickness" Value="2" />
+        </Style>
+
+        <!-- Workflow tile: a card that lifts its border to the accent colour on hover. -->
+        <Style x:Key="OgocTile" TargetType="Button">
+            <Setter Property="FocusVisualStyle" Value="{StaticResource OgocFocusVisual}" />
+            <Setter Property="MinHeight" Value="92" />
+            <Setter Property="Margin" Value="0,0,12,12" />
+            <Setter Property="FontSize" Value="{DynamicResource OgocBodySize}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="16,14"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter RecognizesAccessKey="True"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource CardBackgroundFillColorSecondaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.45" />
+                                <Setter Property="Cursor" Value="Arrow" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Navigation rail item: selected item gets a tinted fill and an accent pill on the left. -->
+        <Style x:Key="OgocNavItem" TargetType="ButtonBase">
+            <Setter Property="FocusVisualStyle" Value="{StaticResource OgocFocusVisual}" />
+            <Setter Property="MinHeight" Value="40" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+            <Setter Property="FontSize" Value="{DynamicResource OgocBodySize}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ButtonBase">
+                        <Grid>
+                            <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="6" Padding="12,6">
+                                <ContentPresenter RecognizesAccessKey="True" VerticalAlignment="Center"
+                                                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+                            </Border>
+                            <Border x:Name="Pill" Width="3" Height="16" CornerRadius="1.5"
+                                    HorizontalAlignment="Left" VerticalAlignment="Center"
+                                    Background="{DynamicResource AccentFillColorDefaultBrush}"
+                                    Visibility="Collapsed" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="ToggleButton.IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                                <Setter TargetName="Pill" Property="Visibility" Value="Visible" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="OgocIcon" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource OgocIconFont}" />
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,0,12,0" />
+        </Style>
+
+        <!-- Section card: one per dashboard and settings section. -->
+        <Style x:Key="OgocCard" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="16,14" />
+            <Setter Property="Margin" Value="0,0,0,12" />
         </Style>
 
         <Style x:Key="OgocHeading" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="{DynamicResource OgocHeadingSize}" />
-            <Setter Property="FontWeight" Value="Bold" />
-            <Setter Property="Margin" Value="0,0,0,6" />
-            <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}" />
+            <Setter Property="FontSize" Value="{DynamicResource OgocLargeSize}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
             <!-- Every section heading is reachable with Narrator's H key; a sub-section sets Level3 on itself. -->
             <Setter Property="AutomationProperties.HeadingLevel" Value="Level2" />
         </Style>
 
-        <Style x:Key="OgocList" TargetType="ListView">
+        <Style x:Key="OgocCaption" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="{DynamicResource OgocSmallSize}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+        </Style>
+
+        <Style x:Key="OgocList" TargetType="ListView" BasedOn="{StaticResource {x:Type ListView}}">
             <Setter Property="FocusVisualStyle" Value="{StaticResource OgocFocusVisual}" />
-            <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.WindowBrushKey}}" />
-            <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
         </Style>
 
         <DataTemplate DataType="{x:Type dashboard:DashboardViewModel}">

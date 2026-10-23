@@ -8,80 +8,142 @@
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=shell:ShellViewModel}"
         Title="OG Opossum Command Central"
-        Height="560" Width="860"
-        MinHeight="420" MinWidth="600"
+        Height="700" Width="1040"
+        MinHeight="480" MinWidth="760"
         WindowStartupLocation="CenterScreen"
-        Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
-        Foreground="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}"
         KeyboardNavigation.TabNavigation="Cycle"
         FontSize="{DynamicResource OgocBodySize}"
         AutomationProperties.Name="OG Opossum Command Central">
-    <Grid Margin="12">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
+    <!-- Layout (ADR-055): navigation rail on the left, page header and the current view on the right.
+         No window Background: the Fluent theme paints it (Mica on Windows 11). -->
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="208" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
 
-        <!-- Header: title, profile switch, host status -->
-        <Grid Grid.Row="0" Margin="0,0,0,10">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0"
-                       Text="OG Opossum Command Central"
-                       FontSize="{DynamicResource OgocTitleSize}" FontWeight="Bold"
-                       VerticalAlignment="Center" />
-            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0">
-                <Label Content="Pro_file:" Target="{Binding ElementName=ProfilePicker}" VerticalAlignment="Center" />
-                <ComboBox x:Name="ProfilePicker"
-                          MinWidth="120"
-                          ItemsSource="{Binding Profiles}"
-                          SelectedItem="{Binding ActiveProfile, Mode=TwoWay}"
-                          FocusVisualStyle="{StaticResource OgocFocusVisual}"
-                          AutomationProperties.Name="Active profile" />
+        <!-- Navigation rail -->
+        <DockPanel Grid.Column="0" Margin="12,16,8,16" LastChildFill="False">
+            <StackPanel DockPanel.Dock="Top" Margin="12,0,0,20">
+                <TextBlock Text="OG Opossum" FontSize="{DynamicResource OgocLargeSize}" FontWeight="SemiBold" />
+                <TextBlock Text="Command Central" Style="{StaticResource OgocCaption}" />
             </StackPanel>
-            <TextBlock Grid.Column="2"
-                       Text="{Binding HostStatus}"
-                       VerticalAlignment="Center"
-                       FontWeight="SemiBold"
-                       a11y:LiveRegion.Announce="True" />
+
+            <StackPanel DockPanel.Dock="Top" AutomationProperties.Name="Pages">
+                <RadioButton GroupName="Nav"
+                             Style="{StaticResource OgocNavItem}"
+                             IsChecked="{Binding IsDashboardPage, Mode=OneWay}"
+                             Command="{Binding ShowDashboardCommand}"
+                             AutomationProperties.Name="Show dashboard">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource OgocIcon}" Text="&#xE80F;" />
+                        <AccessText Text="_Dashboard" VerticalAlignment="Center" />
+                    </StackPanel>
+                </RadioButton>
+                <RadioButton GroupName="Nav"
+                             Style="{StaticResource OgocNavItem}"
+                             IsChecked="{Binding IsHistoryPage, Mode=OneWay}"
+                             Command="{Binding ShowHistoryCommand}"
+                             AutomationProperties.Name="Show history">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource OgocIcon}" Text="&#xE81C;" />
+                        <AccessText Text="_History" VerticalAlignment="Center" />
+                    </StackPanel>
+                </RadioButton>
+                <RadioButton GroupName="Nav"
+                             Style="{StaticResource OgocNavItem}"
+                             IsChecked="{Binding IsSettingsPage, Mode=OneWay}"
+                             Command="{Binding ShowSettingsCommand}"
+                             AutomationProperties.Name="Show settings">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource OgocIcon}" Text="&#xE713;" />
+                        <AccessText Text="_Settings" VerticalAlignment="Center" />
+                    </StackPanel>
+                </RadioButton>
+            </StackPanel>
+
+            <StackPanel DockPanel.Dock="Bottom">
+                <Button Style="{StaticResource OgocNavItem}"
+                        Command="{Binding OpenPaletteCommand}"
+                        AutomationProperties.Name="Open the command palette"
+                        AutomationProperties.HelpText="Also opened by the global hotkey, Ctrl+Alt+Space by default">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource OgocIcon}" Text="&#xE721;" />
+                        <AccessText Text="Command _palette" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+                <Button Style="{StaticResource OgocNavItem}"
+                        Command="{Binding HideCommand}"
+                        Margin="0"
+                        AutomationProperties.Name="Hide window to tray">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource OgocIcon}" Text="&#xE921;" />
+                        <AccessText Text="Hide to _tray" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </DockPanel>
+
+        <!-- Page -->
+        <Grid Grid.Column="1" Margin="16,16,24,16">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" Margin="0,0,0,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Grid.Column="0"
+                           Text="{Binding PageTitle}"
+                           FontSize="{DynamicResource OgocDisplaySize}"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center"
+                           AutomationProperties.HeadingLevel="Level1" />
+
+                <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Label Content="Pro_file" Target="{Binding ElementName=ProfilePicker}" VerticalAlignment="Center"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    <!-- The wheel never changes the profile: switching Work and Personal takes a click or the keyboard (ADR-055). -->
+                    <ComboBox x:Name="ProfilePicker"
+                              MinWidth="140"
+                              ItemsSource="{Binding Profiles}"
+                              SelectedItem="{Binding ActiveProfile, Mode=TwoWay}"
+                              FocusVisualStyle="{StaticResource OgocFocusVisual}"
+                              a11y:WheelPassThrough.IsEnabled="True"
+                              AutomationProperties.Name="Active profile" />
+                </StackPanel>
+
+                <Border Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                        HorizontalAlignment="Left"
+                        Margin="0,8,0,0"
+                        Padding="10,3,12,3"
+                        CornerRadius="12"
+                        Background="{DynamicResource SystemFillColorSuccessBackgroundBrush}">
+                    <StackPanel Orientation="Horizontal">
+                        <Ellipse Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center"
+                                 Fill="{DynamicResource SystemFillColorSuccessBrush}" />
+                        <TextBlock Text="{Binding HostStatus}"
+                                   FontSize="{DynamicResource OgocSmallSize}"
+                                   FontWeight="SemiBold"
+                                   TextWrapping="Wrap"
+                                   VerticalAlignment="Center"
+                                   a11y:LiveRegion.Announce="True" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Dashboard, History or Settings -->
+            <ContentControl Grid.Row="1"
+                            Content="{Binding CurrentView}"
+                            Focusable="False" />
         </Grid>
-
-        <!-- Dashboard or History -->
-        <ContentControl Grid.Row="1"
-                        Content="{Binding CurrentView}"
-                        Focusable="False" />
-
-        <!-- Footer navigation -->
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
-            <Button Content="_Dashboard"
-                    Style="{StaticResource OgocButton}"
-                    Command="{Binding ShowDashboardCommand}"
-                    Margin="0,0,8,0"
-                    AutomationProperties.Name="Show dashboard" />
-            <Button Content="_History"
-                    Style="{StaticResource OgocButton}"
-                    Command="{Binding ShowHistoryCommand}"
-                    Margin="0,0,8,0"
-                    AutomationProperties.Name="Show history" />
-            <Button Content="_Settings"
-                    Style="{StaticResource OgocButton}"
-                    Command="{Binding ShowSettingsCommand}"
-                    Margin="0,0,8,0"
-                    AutomationProperties.Name="Show settings" />
-            <Button Content="Command _palette"
-                    Style="{StaticResource OgocButton}"
-                    Command="{Binding OpenPaletteCommand}"
-                    Margin="0,0,8,0"
-                    AutomationProperties.Name="Open the command palette"
-                    AutomationProperties.HelpText="Also opened by the global hotkey, Ctrl+Alt+Space by default" />
-            <Button Content="Hide to _tray"
-                    Style="{StaticResource OgocButton}"
-                    Command="{Binding HideCommand}"
-                    AutomationProperties.Name="Hide window to tray" />
-        </StackPanel>
     </Grid>
 </Window>

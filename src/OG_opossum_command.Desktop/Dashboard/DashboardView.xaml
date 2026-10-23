@@ -10,23 +10,14 @@
              Focusable="False"
              AutomationProperties.Name="Dashboard">
 
-    <!-- Scrolls so that no panel (and never Cancel) is clipped at large text sizes. -->
-    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
+    <!-- Scrolls so that no panel (and never Cancel) is clipped at large text sizes.
+         Lists inside pass the wheel to this page (ADR-055). -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False" Padding="0,0,8,0">
+    <StackPanel>
 
         <!-- Six tiles, stable positions (spec §14) -->
-        <ItemsControl Grid.Row="0"
-                      ItemsSource="{Binding Tiles}"
+        <ItemsControl ItemsSource="{Binding Tiles}"
+                      Margin="0,0,-12,0"
                       Focusable="False"
                       KeyboardNavigation.TabNavigation="Continue"
                       AutomationProperties.Name="Workflow tiles">
@@ -45,18 +36,34 @@
                             ToolTipService.ShowOnDisabled="True"
                             AutomationProperties.Name="{Binding AutomationName}"
                             AutomationProperties.HelpText="{Binding Description}">
-                        <TextBlock Text="{Binding Name}" TextWrapping="Wrap" TextAlignment="Center" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Width="36" Height="36" CornerRadius="18" Margin="0,0,12,0"
+                                    VerticalAlignment="Center"
+                                    Background="{DynamicResource AccentFillColorDefaultBrush}">
+                                <TextBlock Text="&#xE768;" FontFamily="{StaticResource OgocIconFont}" FontSize="14"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" Margin="2,0,0,0"
+                                           Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Name}" TextWrapping="Wrap"
+                                           FontSize="{DynamicResource OgocLargeSize}" FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding Description}" Style="{StaticResource OgocCaption}"
+                                           TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
+                            </StackPanel>
+                        </Grid>
                     </Button>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>
 
         <!-- Active execution -->
-        <Border Grid.Row="1"
-                Margin="6,8,6,0"
-                Padding="10"
+        <Border Style="{StaticResource OgocCard}"
                 BorderThickness="2"
-                BorderBrush="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}"
+                BorderBrush="{DynamicResource AccentFillColorDefaultBrush}"
                 Visibility="{Binding HasActiveRun, Converter={StaticResource BoolToVis}}"
                 AutomationProperties.Name="Active execution">
             <Grid>
@@ -65,12 +72,13 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0">
-                    <TextBlock Style="{StaticResource OgocHeading}" Text="ACTIVE EXECUTION" />
+                    <TextBlock Style="{StaticResource OgocHeading}" Text="Running now" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
                     <TextBlock Text="{Binding ActiveHeadline}" TextWrapping="Wrap" FontSize="{DynamicResource OgocLargeSize}" FontWeight="SemiBold" a11y:LiveRegion.Announce="True" />
-                    <ItemsControl ItemsSource="{Binding ActiveSteps}" Margin="0,6,0,0" Focusable="False">
+                    <ProgressBar IsIndeterminate="True" Height="4" Margin="0,8,0,4" AutomationProperties.Name="Run in progress" />
+                    <ItemsControl ItemsSource="{Binding ActiveSteps}" Margin="0,4,0,0" Focusable="False">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="{x:Type local:StepRow}">
-                                <TextBlock Margin="4,1" TextWrapping="Wrap" AutomationProperties.Name="{Binding AutomationName}">
+                                <TextBlock Margin="0,2" TextWrapping="Wrap" AutomationProperties.Name="{Binding AutomationName}">
                                     <Run Text="{Binding Glyph, Mode=OneWay}" FontWeight="Bold" />
                                     <Run Text=" " />
                                     <Run Text="{Binding Text, Mode=OneWay}" />
@@ -79,156 +87,68 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </StackPanel>
+                <!-- AccessText: the Fluent accent template does not underline access keys from a string. -->
                 <Button Grid.Column="1"
-                        Content="_Cancel"
                         Style="{StaticResource OgocCancel}"
                         Command="{Binding CancelCommand}"
                         VerticalAlignment="Top"
-                        Margin="12,0,0,0"
-                        AutomationProperties.Name="Cancel the active run" />
+                        Margin="16,0,0,0"
+                        AutomationProperties.Name="Cancel the active run">
+                    <AccessText Text="_Cancel" />
+                </Button>
             </Grid>
         </Border>
 
-        <!-- Feedback line -->
-        <TextBlock Grid.Row="2"
-                   Margin="6,4,6,0"
-                   Text="{Binding StatusMessage}"
-                   TextWrapping="Wrap"
-                   a11y:LiveRegion.Announce="True" />
-
-        <!-- Next schedule occurrence (spec §08) -->
-        <TextBlock Grid.Row="3"
-                   Margin="6,2,6,0"
-                   Text="{Binding NextScheduled}"
-                   TextWrapping="Wrap"
-                   Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
-
-        <!-- Today: remaining events from the profile's calendar file (ADR-011, ADR-039) -->
-        <Border Grid.Row="4"
-                Margin="6,6,6,0"
-                Padding="8"
-                BorderThickness="1"
-                BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
-                AutomationProperties.Name="Today">
-            <StackPanel>
-                <DockPanel LastChildFill="True">
-                    <Button DockPanel.Dock="Right"
-                            Content="_Refresh"
-                            Style="{StaticResource OgocButton}"
-                            Padding="10,2"
-                            MinHeight="28"
-                            Command="{Binding RefreshCalendarCommand}"
-                            AutomationProperties.Name="Refresh today's calendar and carryovers"
-                            AutomationProperties.HelpText="Reads the calendar file and the carryovers file again" />
-                    <StackPanel VerticalAlignment="Center">
-                        <TextBlock Style="{StaticResource OgocHeading}" Margin="0" Text="TODAY" />
-                        <TextBlock Text="{Binding TodayStatus}"
-                                   TextWrapping="Wrap"
-                                   FontSize="{DynamicResource OgocSmallSize}"
-                                   Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
-                                   a11y:LiveRegion.Announce="True" />
-                    </StackPanel>
-                </DockPanel>
-                <ItemsControl ItemsSource="{Binding Today}"
-                              Grid.IsSharedSizeScope="True"
-                              Margin="0,4,0,0"
-                              Focusable="False"
-                              KeyboardNavigation.TabNavigation="Continue"
-                              Visibility="{Binding HasTodayEvents, Converter={StaticResource BoolToVis}}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="{x:Type local:TodayEvent}">
-                            <Grid Margin="0,1">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" SharedSizeGroup="TodayTime" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{Binding Time}" FontFamily="Consolas" VerticalAlignment="Center" Margin="0,0,12,0" />
-                                <TextBlock Grid.Column="1" VerticalAlignment="Center" TextWrapping="Wrap">
-                                    <Run Text="{Binding Subject, Mode=OneWay}" />
-                                    <Run Text="{Binding Detail, Mode=OneWay}" FontSize="{DynamicResource OgocSmallSize}" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
-                                </TextBlock>
-                                <Button Grid.Column="2"
-                                        Content="Open"
-                                        Style="{StaticResource OgocButton}"
-                                        Padding="8,0"
-                                        MinHeight="24"
-                                        Margin="8,0,0,0"
-                                        Visibility="{Binding HasLink, Converter={StaticResource BoolToVis}}"
-                                        Command="{Binding DataContext.OpenEventCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                        CommandParameter="{Binding}"
-                                        AutomationProperties.Name="{Binding Subject, StringFormat=Open {0}}" />
-                            </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-
-                <!-- Carryovers from yesterday: tomorrow.json written by the user's own flow (ADR-051). Text only; nothing is opened. -->
-                <TextBlock Style="{StaticResource OgocHeading}"
-                           Margin="0,10,0,0"
-                           Text="CARRYOVERS FROM YESTERDAY"
-                           AutomationProperties.HeadingLevel="Level3" />
-                <TextBlock Text="{Binding CarryoverNote}"
-                           TextWrapping="Wrap"
-                           FontSize="{DynamicResource OgocSmallSize}"
-                           Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
-                           a11y:LiveRegion.Announce="True" />
-                <ListBox ItemsSource="{Binding Carryovers}"
-                         Margin="0,4,0,0"
-                         BorderThickness="0"
-                         FocusVisualStyle="{StaticResource OgocFocusVisual}"
-                         Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
-                         Foreground="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}"
-                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                         ScrollViewer.VerticalScrollBarVisibility="Disabled"
-                         ScrollViewer.CanContentScroll="False"
-                         Visibility="{Binding HasCarryovers, Converter={StaticResource BoolToVis}}"
-                         AutomationProperties.Name="Carryovers from yesterday">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate DataType="{x:Type local:CarryoverRow}">
-                            <TextBlock TextWrapping="Wrap" FontSize="{DynamicResource OgocBodySize}">
-                                <Run Text="{Binding Title, Mode=OneWay}" />
-                                <Run Text="{Binding Detail, Mode=OneWay}" FontSize="{DynamicResource OgocSmallSize}" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
-                            </TextBlock>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-            </StackPanel>
-        </Border>
+        <!-- Feedback line and next schedule occurrence (spec §08) -->
+        <StackPanel Margin="2,0,0,12">
+            <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" a11y:LiveRegion.Announce="True" />
+            <TextBlock Text="{Binding NextScheduled}" FontSize="{DynamicResource OgocBodySize}">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock" BasedOn="{StaticResource OgocCaption}">
+                        <Style.Triggers>
+                            <Trigger Property="Text" Value="">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+        </StackPanel>
 
         <!-- Interrupted runs waiting for the operator (spec §13 Needs attention) -->
-        <Border Grid.Row="5"
-                Margin="6,6,6,0"
-                Padding="8"
-                BorderThickness="2"
-                BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
+        <Border Style="{StaticResource OgocCard}"
+                Background="{DynamicResource SystemFillColorCriticalBackgroundBrush}"
                 Visibility="{Binding HasAttention, Converter={StaticResource BoolToVis}}"
                 AutomationProperties.Name="Runs that need attention">
             <StackPanel>
-                <TextBlock Style="{StaticResource OgocHeading}" Text="NEEDS ATTENTION (the app stopped while these were running)" />
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                    <TextBlock Style="{StaticResource OgocIcon}" Text="&#xEA39;" Margin="0,0,8,8" Foreground="{DynamicResource SystemFillColorCriticalBrush}" />
+                    <TextBlock Style="{StaticResource OgocHeading}" Text="Needs attention" />
+                </StackPanel>
+                <TextBlock Style="{StaticResource OgocCaption}" Text="The app stopped while these were running." Margin="0,0,0,8" />
                 <ItemsControl ItemsSource="{Binding Attention}" Focusable="False" KeyboardNavigation.TabNavigation="Continue">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="{x:Type local:AttentionItem}">
-                            <Grid Margin="0,2">
+                            <Grid Margin="0,4">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                    <TextBlock FontWeight="SemiBold">
+                                    <TextBlock FontWeight="SemiBold" TextWrapping="Wrap">
                                         <Run Text="{Binding WorkflowName, Mode=OneWay}" />
                                         <Run Text=" · " />
                                         <Run Text="{Binding Profile, Mode=OneWay}" />
                                         <Run Text=" · " />
                                         <Run Text="{Binding When, Mode=OneWay}" />
                                     </TextBlock>
-                                    <TextBlock Text="{Binding Explanation}" TextWrapping="Wrap" FontSize="{DynamicResource OgocSmallSize}" />
+                                    <TextBlock Text="{Binding Explanation}" Style="{StaticResource OgocCaption}" />
                                 </StackPanel>
                                 <Button Grid.Column="1"
                                         Content="Resume"
-                                        Style="{StaticResource OgocButton}"
-                                        Margin="8,0,0,0"
+                                        Style="{StaticResource OgocAccentButton}"
+                                        Margin="12,0,0,0"
                                         VerticalAlignment="Center"
                                         Command="{Binding DataContext.ResumeCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                         CommandParameter="{Binding}"
@@ -250,44 +170,130 @@
             </StackPanel>
         </Border>
 
+        <!-- Today: remaining events from the profile's calendar file (ADR-011, ADR-039) -->
+        <Border Style="{StaticResource OgocCard}" AutomationProperties.Name="Today">
+            <StackPanel>
+                <DockPanel LastChildFill="True" Margin="0,0,0,4">
+                    <Button DockPanel.Dock="Right"
+                            Style="{StaticResource OgocButton}"
+                            VerticalAlignment="Top"
+                            Command="{Binding RefreshCalendarCommand}"
+                            AutomationProperties.Name="Refresh today's calendar and carryovers"
+                            AutomationProperties.HelpText="Reads the calendar file and the carryovers file again">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource OgocIcon}" Text="&#xE72C;" FontSize="13" Margin="0,0,8,0" />
+                            <AccessText Text="_Refresh" />
+                        </StackPanel>
+                    </Button>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource OgocHeading}" Margin="0" Text="Today" />
+                        <TextBlock Text="{Binding TodayStatus}" Style="{StaticResource OgocCaption}" a11y:LiveRegion.Announce="True" />
+                    </StackPanel>
+                </DockPanel>
+                <ItemsControl ItemsSource="{Binding Today}"
+                              Grid.IsSharedSizeScope="True"
+                              Margin="0,6,0,0"
+                              Focusable="False"
+                              KeyboardNavigation.TabNavigation="Continue"
+                              Visibility="{Binding HasTodayEvents, Converter={StaticResource BoolToVis}}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type local:TodayEvent}">
+                            <Grid Margin="0,3">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="TodayTime" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{Binding Time}" FontFamily="{StaticResource OgocMonoFont}" VerticalAlignment="Center" Margin="0,0,16,0"
+                                           Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                                <TextBlock Grid.Column="1" VerticalAlignment="Center" TextWrapping="Wrap">
+                                    <Run Text="{Binding Subject, Mode=OneWay}" />
+                                    <Run Text="{Binding Detail, Mode=OneWay}" FontSize="{DynamicResource OgocSmallSize}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                </TextBlock>
+                                <Button Grid.Column="2"
+                                        Content="Open"
+                                        Style="{StaticResource OgocButton}"
+                                        Padding="10,2"
+                                        MinHeight="28"
+                                        Margin="8,0,0,0"
+                                        Visibility="{Binding HasLink, Converter={StaticResource BoolToVis}}"
+                                        Command="{Binding DataContext.OpenEventCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        CommandParameter="{Binding}"
+                                        AutomationProperties.Name="{Binding Subject, StringFormat=Open {0}}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- Carryovers from yesterday: tomorrow.json written by the user's own flow (ADR-051). Text only; nothing is opened. -->
+                <TextBlock Style="{StaticResource OgocHeading}"
+                           FontSize="{DynamicResource OgocBodySize}"
+                           Margin="0,14,0,2"
+                           Text="Carried over from yesterday"
+                           AutomationProperties.HeadingLevel="Level3" />
+                <TextBlock Text="{Binding CarryoverNote}" Style="{StaticResource OgocCaption}" a11y:LiveRegion.Announce="True" />
+                <ListBox ItemsSource="{Binding Carryovers}"
+                         Margin="0,4,0,0"
+                         BorderThickness="0"
+                         Background="Transparent"
+                         FocusVisualStyle="{StaticResource OgocFocusVisual}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                         ScrollViewer.CanContentScroll="False"
+                         a11y:WheelPassThrough.IsEnabled="True"
+                         Visibility="{Binding HasCarryovers, Converter={StaticResource BoolToVis}}"
+                         AutomationProperties.Name="Carryovers from yesterday">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate DataType="{x:Type local:CarryoverRow}">
+                            <TextBlock TextWrapping="Wrap" FontSize="{DynamicResource OgocBodySize}">
+                                <Run Text="{Binding Title, Mode=OneWay}" />
+                                <Run Text="{Binding Detail, Mode=OneWay}" FontSize="{DynamicResource OgocSmallSize}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                            </TextBlock>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </StackPanel>
+        </Border>
+
         <!-- Workflow files that did not validate -->
-        <Border Grid.Row="6"
-                Margin="6,6,6,0"
-                Padding="8"
-                BorderThickness="1"
-                BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
+        <Border Style="{StaticResource OgocCard}"
+                Background="{DynamicResource SystemFillColorCautionBackgroundBrush}"
                 Visibility="{Binding HasLoadErrors, Converter={StaticResource BoolToVis}}">
             <StackPanel>
-                <TextBlock Style="{StaticResource OgocHeading}" Text="WORKFLOW FILES WITH PROBLEMS (fix the file, then switch profile to reload)" />
+                <TextBlock Style="{StaticResource OgocHeading}" Text="Workflow files with problems" Margin="0,0,0,2" />
+                <TextBlock Style="{StaticResource OgocCaption}" Text="Fix the file, then switch profile to reload." Margin="0,0,0,8" />
                 <ItemsControl ItemsSource="{Binding LoadErrors}" Focusable="False">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <TextBlock Text="{Binding}" TextWrapping="Wrap" FontFamily="Consolas" FontSize="{DynamicResource OgocSmallSize}" />
+                            <TextBlock Text="{Binding}" TextWrapping="Wrap" FontFamily="{StaticResource OgocMonoFont}" FontSize="{DynamicResource OgocSmallSize}" Margin="0,2" />
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </StackPanel>
         </Border>
 
-        <!-- Recent runs -->
-        <DockPanel Grid.Row="7" Margin="6,10,6,0">
-            <TextBlock DockPanel.Dock="Top" Style="{StaticResource OgocHeading}" Text="RECENT RUNS" />
-            <ListView ItemsSource="{Binding RecentRuns}"
-                      MinHeight="120"
-                      MaxHeight="260"
-                      Style="{StaticResource OgocList}"
-                      AutomationProperties.Name="Recent runs"
-                      SelectionMode="Single">
-                <ListView.View>
-                    <GridView>
-                        <GridViewColumn Header="When" Width="130" DisplayMemberBinding="{Binding When}" />
-                        <GridViewColumn Header="Workflow" Width="180" DisplayMemberBinding="{Binding WorkflowName}" />
-                        <GridViewColumn Header="Status" Width="100" DisplayMemberBinding="{Binding Status}" />
-                        <GridViewColumn Header="Result" Width="320" DisplayMemberBinding="{Binding Summary}" />
-                    </GridView>
-                </ListView.View>
-            </ListView>
-        </DockPanel>
-    </Grid>
+        <!-- Recent runs: at most 8 rows, so the list grows with them and the page does the scrolling. -->
+        <Border Style="{StaticResource OgocCard}" Padding="16,14,16,8">
+            <StackPanel>
+                <TextBlock Style="{StaticResource OgocHeading}" Text="Recent runs" />
+                <ListView ItemsSource="{Binding RecentRuns}"
+                          MinHeight="80"
+                          Style="{StaticResource OgocList}"
+                          ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                          a11y:WheelPassThrough.IsEnabled="True"
+                          AutomationProperties.Name="Recent runs"
+                          SelectionMode="Single">
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn Header="When" Width="140" DisplayMemberBinding="{Binding When}" />
+                            <GridViewColumn Header="Workflow" Width="180" DisplayMemberBinding="{Binding WorkflowName}" />
+                            <GridViewColumn Header="Status" Width="110" DisplayMemberBinding="{Binding Status}" />
+                            <GridViewColumn Header="Result" Width="320" DisplayMemberBinding="{Binding Summary}" />
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+            </StackPanel>
+        </Border>
+    </StackPanel>
     </ScrollViewer>
 </UserControl>

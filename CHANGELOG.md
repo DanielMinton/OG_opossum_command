@@ -38,6 +38,14 @@ writes (`docs/POWER_AUTOMATE_FLOW.md`).
 - The calendar's default path now comes from the shared exports folder (same location as before).
   The cross-OneDrive guard is shared code (`OneDriveBoundary`).
 - Version 0.2.0 (`Directory.Build.props`, `app.manifest`).
+- **New look** (ADR-055): the built-in Windows 11 theme (Mica, rounded controls, your accent colour,
+  light, dark and high contrast follow Windows), a navigation bar on the left instead of the footer
+  buttons, and the dashboard laid out as cards. Same access keys, tile positions and Cancel button.
+
+### Fixed
+
+- Scrolling the mouse wheel over the profile picker no longer switches between Work and Personal,
+  and scrolling over Recent runs scrolls the dashboard instead of getting stuck in the list (ADR-055).
 
 ## 0.1.0 — 2026-10-23
 

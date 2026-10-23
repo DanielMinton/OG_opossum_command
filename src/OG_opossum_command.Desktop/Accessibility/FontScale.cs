@@ -19,6 +19,7 @@ internal static class FontScale
         ("OgocHeadingSize", 13),
         ("OgocLargeSize", 16),
         ("OgocTitleSize", 20),
+        ("OgocDisplaySize", 28),
     ];
 
     /// <summary>Applies the current scale to the app resources and keeps it current until the app exits.</summary>

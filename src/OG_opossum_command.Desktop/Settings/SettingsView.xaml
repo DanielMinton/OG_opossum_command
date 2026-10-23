@@ -9,95 +9,114 @@
              d:DataContext="{d:DesignInstance Type=local:SettingsViewModel}"
              Focusable="False"
              AutomationProperties.Name="Settings">
-    <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
-        <StackPanel Margin="6">
-            <TextBlock Style="{StaticResource OgocHeading}" Text="COMMAND PALETTE HOTKEY" />
-            <!-- Declared label, box, button so Tab order matches what is on screen. -->
-            <Grid Margin="0,0,0,4">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <Label Grid.Column="0" Content="Hot_key:" Target="{Binding ElementName=HotkeyBox}" VerticalAlignment="Center" />
-                <TextBox x:Name="HotkeyBox"
-                         Grid.Column="1"
-                         MinWidth="200"
-                         VerticalContentAlignment="Center"
-                         Text="{Binding HotkeyText, UpdateSourceTrigger=PropertyChanged}"
-                         FocusVisualStyle="{StaticResource OgocFocusVisual}"
-                         AutomationProperties.Name="Command palette hotkey"
-                         AutomationProperties.HelpText="Modifiers plus one key, for example Ctrl+Alt+Space" />
-                <Button Grid.Column="2"
-                        Content="_Apply"
-                        Style="{StaticResource OgocButton}"
-                        Command="{Binding ApplyHotkeyCommand}"
-                        Margin="8,0,0,0"
-                        AutomationProperties.Name="Apply hotkey" />
-            </Grid>
-            <TextBlock Text="{Binding HotkeyStatus}" TextWrapping="Wrap" Margin="0,0,0,12" a11y:LiveRegion.Announce="True" />
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False" Padding="0,0,8,0">
+        <StackPanel>
+            <Border Style="{StaticResource OgocCard}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource OgocHeading}" Text="Command palette hotkey" />
+                    <!-- Declared label, box, button so Tab order matches what is on screen. -->
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" MaxWidth="320" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Label Grid.Column="0" Content="Hot_key" Target="{Binding ElementName=HotkeyBox}" VerticalAlignment="Center" Margin="0,0,8,0" Padding="0" />
+                        <TextBox x:Name="HotkeyBox"
+                                 Grid.Column="1"
+                                 MinWidth="200"
+                                 VerticalContentAlignment="Center"
+                                 Text="{Binding HotkeyText, UpdateSourceTrigger=PropertyChanged}"
+                                 FocusVisualStyle="{StaticResource OgocFocusVisual}"
+                                 AutomationProperties.Name="Command palette hotkey"
+                                 AutomationProperties.HelpText="Modifiers plus one key, for example Ctrl+Alt+Space" />
+                        <Button Grid.Column="2"
+                                Style="{StaticResource OgocAccentButton}"
+                                Command="{Binding ApplyHotkeyCommand}"
+                                Margin="8,0,0,0"
+                                AutomationProperties.Name="Apply hotkey">
+                            <AccessText Text="_Apply" />
+                        </Button>
+                    </Grid>
+                    <TextBlock Text="{Binding HotkeyStatus}" Style="{StaticResource OgocCaption}" a11y:LiveRegion.Announce="True" />
+                </StackPanel>
+            </Border>
 
-            <TextBlock Style="{StaticResource OgocHeading}" Text="NOTIFICATIONS AND SCHEDULES" />
-            <CheckBox Content="_Quiet mode (only failures and runs that need attention show a notification)"
-                      IsChecked="{Binding QuietMode}"
-                      Margin="0,0,0,6"
-                      FocusVisualStyle="{StaticResource OgocFocusVisual}"
-                      AutomationProperties.Name="Quiet mode" />
-            <CheckBox Content="Pa_use all schedules (occurrences while paused are skipped, not deferred)"
-                      IsChecked="{Binding SchedulesPaused}"
-                      Margin="0,0,0,12"
-                      FocusVisualStyle="{StaticResource OgocFocusVisual}"
-                      AutomationProperties.Name="Pause all schedules" />
+            <Border Style="{StaticResource OgocCard}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource OgocHeading}" Text="Notifications and schedules" />
+                    <CheckBox Content="_Quiet mode (only failures and runs that need attention show a notification)"
+                              IsChecked="{Binding QuietMode}"
+                              Margin="0,0,0,6"
+                              FocusVisualStyle="{StaticResource OgocFocusVisual}"
+                              AutomationProperties.Name="Quiet mode" />
+                    <CheckBox Content="Pa_use all schedules (occurrences while paused are skipped, not deferred)"
+                              IsChecked="{Binding SchedulesPaused}"
+                              FocusVisualStyle="{StaticResource OgocFocusVisual}"
+                              AutomationProperties.Name="Pause all schedules" />
+                </StackPanel>
+            </Border>
 
-            <TextBlock Style="{StaticResource OgocHeading}" Text="SCHEDULES (edit the workflow file to change one)" />
-            <TextBlock Text="No workflow has a schedule trigger."
-                       Margin="0,0,0,12"
-                       Visibility="{Binding HasNoSchedules, Converter={StaticResource BoolToVis}}" />
-            <ListView ItemsSource="{Binding Schedules}"
-                      Style="{StaticResource OgocList}"
-                      MaxHeight="220"
-                      Margin="0,0,0,12"
-                      SelectionMode="Single"
-                      Visibility="{Binding HasSchedules, Converter={StaticResource BoolToVis}}"
-                      AutomationProperties.Name="Schedules">
-                <ListView.View>
-                    <GridView>
-                        <GridViewColumn Header="Workflow" Width="150" DisplayMemberBinding="{Binding Workflow}" />
-                        <GridViewColumn Header="Profile" Width="80" DisplayMemberBinding="{Binding Profile}" />
-                        <GridViewColumn Header="Schedule" Width="220" DisplayMemberBinding="{Binding Schedule}" />
-                        <GridViewColumn Header="Next" Width="130" DisplayMemberBinding="{Binding NextDue}" />
-                        <GridViewColumn Header="Last outcome" Width="260" DisplayMemberBinding="{Binding LastOutcome}" />
-                    </GridView>
-                </ListView.View>
-            </ListView>
+            <Border Style="{StaticResource OgocCard}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource OgocHeading}" Text="Schedules" Margin="0,0,0,2" />
+                    <TextBlock Style="{StaticResource OgocCaption}" Text="Edit the workflow file to change one." Margin="0,0,0,8" />
+                    <TextBlock Text="No workflow has a schedule trigger."
+                               Visibility="{Binding HasNoSchedules, Converter={StaticResource BoolToVis}}" />
+                    <ListView ItemsSource="{Binding Schedules}"
+                              Style="{StaticResource OgocList}"
+                              SelectionMode="Single"
+                              ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                              a11y:WheelPassThrough.IsEnabled="True"
+                              Visibility="{Binding HasSchedules, Converter={StaticResource BoolToVis}}"
+                              AutomationProperties.Name="Schedules">
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="Workflow" Width="150" DisplayMemberBinding="{Binding Workflow}" />
+                                <GridViewColumn Header="Profile" Width="80" DisplayMemberBinding="{Binding Profile}" />
+                                <GridViewColumn Header="Schedule" Width="220" DisplayMemberBinding="{Binding Schedule}" />
+                                <GridViewColumn Header="Next" Width="130" DisplayMemberBinding="{Binding NextDue}" />
+                                <GridViewColumn Header="Last outcome" Width="260" DisplayMemberBinding="{Binding LastOutcome}" />
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+                </StackPanel>
+            </Border>
 
             <!-- Read-only export state (ADR-050..052). Change it in profiles\<Profile>\profile.json ("exports"). -->
-            <TextBlock Style="{StaticResource OgocHeading}"
-                       Text="EXPORTS (status.json, alert outbox, carryovers; set in profile.json)" />
-            <ItemsControl ItemsSource="{Binding Exports}"
-                          Margin="0,0,0,12"
-                          Focusable="False"
-                          AutomationProperties.Name="Exports">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate DataType="{x:Type local:ExportsRow}">
-                        <StackPanel Margin="0,0,0,6" AutomationProperties.Name="{Binding AutomationName}">
-                            <TextBlock Text="{Binding Profile}" FontWeight="SemiBold" />
-                            <TextBlock Text="{Binding Folder}" TextWrapping="Wrap" FontSize="{DynamicResource OgocSmallSize}" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
-                            <TextBlock Text="{Binding Status}" TextWrapping="Wrap" FontSize="{DynamicResource OgocSmallSize}" />
-                            <TextBlock Text="{Binding Alerts}" TextWrapping="Wrap" FontSize="{DynamicResource OgocSmallSize}" />
-                            <TextBlock Text="{Binding Carryovers}" TextWrapping="Wrap" FontSize="{DynamicResource OgocSmallSize}" />
-                        </StackPanel>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+            <Border Style="{StaticResource OgocCard}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource OgocHeading}" Text="Exports" Margin="0,0,0,2" />
+                    <TextBlock Style="{StaticResource OgocCaption}" Text="status.json, the alert outbox and carryovers. Set in profile.json." Margin="0,0,0,8" />
+                    <ItemsControl ItemsSource="{Binding Exports}"
+                                  Focusable="False"
+                                  AutomationProperties.Name="Exports">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type local:ExportsRow}">
+                                <StackPanel Margin="0,0,0,10" AutomationProperties.Name="{Binding AutomationName}">
+                                    <TextBlock Text="{Binding Profile}" FontWeight="SemiBold" />
+                                    <TextBlock Text="{Binding Folder}" Style="{StaticResource OgocCaption}" FontFamily="{StaticResource OgocMonoFont}" />
+                                    <TextBlock Text="{Binding Status}" TextWrapping="Wrap" FontSize="{DynamicResource OgocSmallSize}" />
+                                    <TextBlock Text="{Binding Alerts}" TextWrapping="Wrap" FontSize="{DynamicResource OgocSmallSize}" />
+                                    <TextBlock Text="{Binding Carryovers}" TextWrapping="Wrap" FontSize="{DynamicResource OgocSmallSize}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
 
-            <TextBlock Style="{StaticResource OgocHeading}" Text="DATA FOLDER" />
-            <TextBox Text="{Binding DataRoot, Mode=OneWay}"
-                     IsReadOnly="True"
-                     BorderThickness="0"
-                     Background="Transparent"
-                     FocusVisualStyle="{StaticResource OgocFocusVisual}"
-                     AutomationProperties.Name="Data folder path" />
+            <Border Style="{StaticResource OgocCard}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource OgocHeading}" Text="Data folder" />
+                    <TextBox Text="{Binding DataRoot, Mode=OneWay}"
+                             IsReadOnly="True"
+                             FontFamily="{StaticResource OgocMonoFont}"
+                             FocusVisualStyle="{StaticResource OgocFocusVisual}"
+                             AutomationProperties.Name="Data folder path" />
+                </StackPanel>
+            </Border>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

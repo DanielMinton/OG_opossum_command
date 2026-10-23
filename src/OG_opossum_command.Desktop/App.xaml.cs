@@ -11,6 +11,7 @@ using OG_opossum_command.Core.Seeding;
 using OG_opossum_command.Desktop.Accessibility;
 using OG_opossum_command.Desktop.CommandPalette;
 using OG_opossum_command.Desktop.Shell;
+using OG_opossum_command.Desktop.Smoke;
 using OG_opossum_command.Desktop.Tray;
 
 namespace OG_opossum_command.Desktop;
@@ -231,9 +232,15 @@ public partial class App : Application, IDashboardPresenter
             await window.LoadedTask;
             await Shell!.Dashboard.FirstBindCompleted;
 
+            SmokeSnapshot.Save(window, "dashboard");
+
             // Instantiate the other surfaces off-screen so XAML resource errors fail the gate, not the user's first keypress.
+            Shell.ShowHistoryCommand.Execute(null);
+            await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Loaded);
+            SmokeSnapshot.Save(window, "history");
             Shell.ShowSettingsCommand.Execute(null);
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Loaded);
+            SmokeSnapshot.Save(window, "settings");
             var palette = new CommandPaletteWindow(new CommandPaletteViewModel(Host!), null)
             {
                 SuppressCloseOnDeactivate = true,
@@ -246,6 +253,7 @@ public partial class App : Application, IDashboardPresenter
             palette.Show();
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Loaded);
             var paletteItems = palette.Results.Items.Count;
+            SmokeSnapshot.Save(palette, "palette");
             palette.Close();
             Shell.ShowDashboardCommand.Execute(null);
             await Shell.Dashboard.RefreshCarryoversAsync();

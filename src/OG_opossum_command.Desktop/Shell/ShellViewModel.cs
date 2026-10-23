@@ -59,7 +59,23 @@ public sealed partial class ShellViewModel : ObservableObject
     public partial string HostStatus { get; set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PageTitle), nameof(IsDashboardPage), nameof(IsHistoryPage), nameof(IsSettingsPage))]
     public partial object CurrentView { get; set; }
+
+    /// <summary>Title shown above the current view.</summary>
+    public string PageTitle => CurrentView switch
+    {
+        HistoryViewModel => "History",
+        SettingsViewModel => "Settings",
+        _ => "Dashboard",
+    };
+
+    /// <summary>Which navigation item is selected (one-way to the nav rail).</summary>
+    public bool IsDashboardPage => CurrentView is DashboardViewModel;
+
+    public bool IsHistoryPage => CurrentView is HistoryViewModel;
+
+    public bool IsSettingsPage => CurrentView is SettingsViewModel;
 
     [ObservableProperty]
     public partial ProfileId ActiveProfile { get; set; }
@@ -75,7 +91,7 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>Rebuilds the one-line host status: running, interrupted count, schedules paused, hotkey problem.</summary>
     public void RefreshHostStatus()
     {
-        var parts = new List<string> { "Host: ● Running" };
+        var parts = new List<string> { "Running" };
         if (_host.InterruptedOnStartup > 0)
         {
             parts.Add(string.Create(CultureInfo.CurrentCulture, $"{_host.InterruptedOnStartup} run(s) interrupted last time"));

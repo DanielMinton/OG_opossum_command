@@ -16,10 +16,8 @@
         Topmost="True"
         ShowInTaskbar="False"
         FontSize="{DynamicResource OgocBodySize}"
-        Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
-        Foreground="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}"
         AutomationProperties.Name="Command palette">
-    <Grid Margin="10">
+    <Grid Margin="14">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -29,11 +27,9 @@
         <TextBox x:Name="QueryBox"
                  Grid.Row="0"
                  FontSize="{DynamicResource OgocLargeSize}"
-                 Padding="6"
+                 Padding="10,8"
                  Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}"
                  FocusVisualStyle="{StaticResource OgocFocusVisual}"
-                 Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
-                 Foreground="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}"
                  AutomationProperties.Name="Search workflows by name or alias" />
 
         <ListBox x:Name="Results"
@@ -42,8 +38,6 @@
                  ItemsSource="{Binding Items}"
                  SelectedItem="{Binding Selected, Mode=TwoWay}"
                  FocusVisualStyle="{StaticResource OgocFocusVisual}"
-                 Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
-                 Foreground="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                  AutomationProperties.Name="Matching workflows">
             <ListBox.ItemTemplate>
@@ -51,7 +45,7 @@
                     <StackPanel Margin="4,2" AutomationProperties.Name="{Binding AutomationName}">
                         <TextBlock Text="{Binding Label}" FontSize="{DynamicResource OgocBodySize}" FontWeight="SemiBold" TextWrapping="Wrap" />
                         <TextBlock Text="{Binding Aliases}" FontSize="{DynamicResource OgocSmallSize}" TextWrapping="Wrap"
-                                   Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                     </StackPanel>
                 </DataTemplate>
             </ListBox.ItemTemplate>
