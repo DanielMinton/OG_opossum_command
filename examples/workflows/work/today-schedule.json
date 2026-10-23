@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "today-schedule",
+  "name": "Today's Schedule",
+  "description": "EXAMPLE - edit me. Reads the calendar file your own Power Automate flow writes to OneDrive (docs/POWER_AUTOMATE_FLOW.md) and shows the Today panel. Without the flow it just says the calendar is unavailable.",
+  "profileId": "work",
+  "trigger": { "type": "manual" },
+  "execution": { "maxParallelSteps": 1, "onDuplicate": "focus-existing" },
+  "steps": [
+    {
+      "id": "read",
+      "name": "Read calendar file",
+      "action": "m365.calendar.readFile",
+      "inputs": { "maxAgeMinutes": 60 },
+      "timeoutSeconds": 20
+    },
+    {
+      "id": "show",
+      "name": "Show Today panel",
+      "action": "dashboard.schedule.show",
+      "inputs": {},
+      "dependsOn": ["read"]
+    }
+  ]
+}

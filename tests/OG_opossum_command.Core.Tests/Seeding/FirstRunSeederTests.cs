@@ -20,7 +20,7 @@ public sealed class FirstRunSeederTests : IDisposable
         var results = FirstRunSeeder.Seed([work, personal], TempDataRoot.ExamplesRoot);
 
         Assert.Equal(2, results.Count);
-        Assert.Equal(["focus-mode.json", "start-workday.json"], results[0].CopiedFiles.Select(Path.GetFileName));
+        Assert.Equal(["focus-mode.json", "start-workday.json", "today-schedule.json"], results[0].CopiedFiles.Select(Path.GetFileName));
         Assert.Equal(["hello-script.json", "plan-tomorrow.json"], results[1].CopiedFiles.Select(Path.GetFileName));
         Assert.Null(results[0].Reason);
         Assert.Equal(["hello.cmd"], results[1].CopiedScripts.Select(Path.GetFileName));
@@ -39,7 +39,7 @@ public sealed class FirstRunSeederTests : IDisposable
 
         var result = FirstRunSeeder.SeedProfile(work, TempDataRoot.ExamplesRoot);
 
-        Assert.Equal(2, result.CopiedFiles.Count);
+        Assert.Equal(3, result.CopiedFiles.Count);
     }
 
     [Fact]

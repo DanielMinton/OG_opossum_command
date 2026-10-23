@@ -58,7 +58,7 @@ public sealed class WorkflowLoaderTests : IDisposable
         var work = Directory.GetFiles(Path.Combine(TempDataRoot.ExamplesRoot, "work"), "*.json");
         var personal = Directory.GetFiles(Path.Combine(TempDataRoot.ExamplesRoot, "personal"), "*.json");
 
-        Assert.Equal(2, work.Length);
+        Assert.Equal(3, work.Length);
         Assert.Equal(2, personal.Length);
         foreach (var file in work)
         {

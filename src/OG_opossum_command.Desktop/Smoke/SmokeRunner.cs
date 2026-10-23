@@ -181,7 +181,9 @@ internal static class SmokeRunner
             var fromEnvironment = AppPaths.FromEnvironment();
             if (fromEnvironment.IsOverridden)
             {
-                return new SmokeDataRoot(fromEnvironment, null);
+                // ForRoot, not FromEnvironment: no OneDrive root is resolved, so no profile has a calendar file and a
+                // smoke run never looks inside the user's real OneDrive (rule 5, ADR-039).
+                return new SmokeDataRoot(AppPaths.ForRoot(fromEnvironment.DataRoot), null);
             }
 
             var folder = Path.Combine(Path.GetTempPath(), $"OG_opossum_command-smoke-{Guid.NewGuid():N}");

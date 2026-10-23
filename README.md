@@ -11,10 +11,10 @@ is superseded). Decisions: [docs/DECISIONS.md](docs/DECISIONS.md).
 
 ## Status
 
-Phase 4 (reliability). Workflows are JSON files per profile (schema v1 and v2, see
-[docs/WORKFLOW-SCHEMA.md](docs/WORKFLOW-SCHEMA.md)); four actions (open a web page, open a folder,
-launch a program with an argument array, run a trusted script from the profile's own `scripts`
-folder); an engine with execution IDs, dependencies, bounded parallelism, resource locks, timeouts,
+Phase 5 (calendar without app registration). Workflows are JSON files per profile (schema v1 and
+v2, see [docs/WORKFLOW-SCHEMA.md](docs/WORKFLOW-SCHEMA.md)); six actions (open a web page, open a
+folder, launch a program with an argument array, run a trusted script from the profile's own
+`scripts` folder, read the calendar file, show today's schedule); an engine with execution IDs, dependencies, bounded parallelism, resource locks, timeouts,
 and cancellation that kills launched process trees; a scheduler (explicit time zone, DST-safe,
 missed-run policies, duplicate suppression, startup reconciliation); crash recovery that resumes only
 provably safe steps and asks about the rest (Resume / Dismiss); SQLite history; Work and Personal
@@ -28,6 +28,12 @@ Scripts: `windows.script.run` only runs files that live in `profiles\<Work|Perso
 an explicit interpreter (`powershell` or `cmd`) and an argument array. If PowerShell's execution
 policy on this PC blocks a `.ps1`, the step says so plainly; the app never overrides that policy.
 
+Calendar: the dashboard's **Today** panel lists the rest of today's work events. They come from a
+JSON file that **your own** Power Automate flow writes to your work OneDrive every 15 minutes (step
+by step in [docs/POWER_AUTOMATE_FLOW.md](docs/POWER_AUTOMATE_FLOW.md)). The app only reads that local
+file: no sign-in, no app registration, no network. Without the flow the panel just says the calendar
+isn't configured or is unavailable. The Personal profile can't read the work calendar.
+
 ## Layout
 
 | Path | What |
@@ -37,7 +43,8 @@ policy on this PC blocks a `.ps1`, the step says so plainly; the app never overr
 | `tests/OG_opossum_command.Core.Tests` | xUnit tests for Core. |
 | `examples/workflows/{work,personal}` | Example workflow files per profile. None is scheduled. |
 | `examples/scripts/personal` | Example trusted script (`hello.cmd`) seeded into the Personal profile's `scripts` folder. |
-| `docs/` | Architecture, decisions, feasibility report, workflow schema. |
+| `docs/` | Architecture, decisions, feasibility report, workflow schema, Power Automate calendar flow (for you to build). |
+| `tests/fixtures` | Shared test fixtures (`calendar.sample.json`, also the sample in the flow guide). |
 | `spikes/feasibility` | Throwaway Phase 1 spike, not in the solution. |
 
 ## Requirements
@@ -91,11 +98,12 @@ Under the root:
 | `profiles\Work\workflows\*.json` | The Work profile's workflows. Edit these; on first run the examples are copied here. |
 | `profiles\Personal\workflows\*.json` | Same for Personal. A file's `profileId` must match its folder. |
 | `profiles\<Work|Personal>\scripts\` | The only place `windows.script.run` reads scripts from. |
-| `profiles\<Work|Personal>\profile.json` | Optional allowlist of action IDs for that profile. |
+| `profiles\<Work|Personal>\profile.json` | Optional: `allowedActions` (action IDs that profile may run) and `calendarFile` (where its calendar JSON is). |
 | `logs\crash.log` | Written only if the app fails to start or hits an unhandled error. |
 
 The app never reads or writes relative to the current directory, never touches the registry, and
-never writes outside the data root. Example workflows live in `examples/workflows/` in the repo and
+never writes outside the data root. The one thing it reads outside the data root is the Work
+profile's calendar file in your work OneDrive (read-only, never created or downloaded). Example workflows live in `examples/workflows/` in the repo and
 next to the exe; they are clearly marked `EXAMPLE - edit me`.
 
 ## The build script

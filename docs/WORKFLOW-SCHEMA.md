@@ -167,6 +167,32 @@ PC's **execution policy**, the step fails with `execution-policy-blocked` and a 
 and lists the options (ask IT, or write the script as `.cmd`). The app never passes
 `-ExecutionPolicy` and never changes policy (rule 2).
 
+### `m365.calendar.readFile` — Read calendar file
+
+Reads the profile's calendar JSON file, which your own Power Automate flow writes to OneDrive
+(ADR-011, ADR-039; build steps and the exact file format in `docs/POWER_AUTOMATE_FLOW.md`). No
+sign-in, no network: one local file is read. The **path comes from the profile**, never from the
+workflow: Work defaults to `%OneDriveCommercial%\OG_opossum_command\calendar.json`, Personal has none,
+and either can be changed with `calendarFile` in `profile.json` (below).
+
+| Input | Type | Default | Rules |
+|---|---|---|---|
+| `maxAgeMinutes` | integer | `60` | 1–1440. A file whose `generatedAt` is older than this still shows its events but is reported as stale. |
+
+Idempotent. Default timeout 20 s. Outcomes: fresh or stale events → completed; missing, empty,
+locked, or half-written file (retried once), online-only placeholder, or no file configured →
+**completed** with "Calendar unavailable …" (the rest of the workflow runs); well-formed JSON in the
+wrong shape → fails with `calendar-invalid`; a path inside the other context's OneDrive → fails with
+`calendar-refused`. History stores the status line and counts only, never event details. **Work
+profile only by default** (ADR-040).
+
+### `dashboard.schedule.show` — Show today's schedule
+
+No inputs (`"inputs": {}`). Brings the dashboard forward on the run's profile with the **Today**
+panel showing that profile's latest calendar read (normally from a `m365.calendar.readFile` step just
+before it, via `dependsOn`). It never reads the file itself, so it can't sidestep the allowlist.
+Idempotent. Default timeout 10 s. Example: `examples/workflows/work/today-schedule.json`.
+
 ## Complete example (v2, scheduled, with a lock and aliases)
 
 ```json
@@ -217,7 +243,14 @@ the run becomes `NeedsAttention` with a plain explanation and waits on the dashb
 { "allowedActions": ["windows.url.open", "windows.folder.open"] }
 ```
 
-Without the file a profile may run every built-in action (including `windows.script.run`). An
-unreadable or invalid policy file is reported as an error and the profile falls back to the built-in
-default (ADR-025). The engine refuses to start any workflow whose steps use an action outside the
+It may also set the calendar file `m365.calendar.readFile` reads (a full path; `%VAR%` allowed):
+
+```json
+{ "calendarFile": "%OneDriveCommercial%\\OG_opossum_command\\calendar.json" }
+```
+
+Without the file, Work may run every built-in action and Personal every action **except** the
+`m365.*` family (ADR-040). An unreadable or invalid policy file is reported as an error and the
+profile **fails closed**: every built-in local action, but no `m365.*` action (ADR-025 as revised by
+ADR-040). The engine refuses to start any workflow whose steps use an action outside the
 allowlist, even if the definition somehow bypassed the loader.

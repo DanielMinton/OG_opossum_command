@@ -21,7 +21,7 @@ public sealed class CoreHostTests : IDisposable
         {
             Assert.Equal(0, host.InterruptedOnStartup);
             Assert.All(host.Seeding, s => Assert.NotEmpty(s.CopiedFiles));
-            Assert.Equal(2, host.GetWorkflows(ProfileId.Work).Workflows.Count);
+            Assert.Equal(3, host.GetWorkflows(ProfileId.Work).Workflows.Count);
             Assert.Equal(2, host.GetWorkflows(ProfileId.Personal).Workflows.Count);
             Assert.Empty(host.Workflows.SelectMany(w => w.Errors));
             Assert.True(File.Exists(Path.Combine(host.Profiles.Get(ProfileId.Personal).ScriptsDirectory, "hello.cmd")), "example script was not seeded");
@@ -97,7 +97,7 @@ public sealed class CoreHostTests : IDisposable
         Assert.Equal(["hello-script"], host.Search("script demo").Select(m => m.Workflow.Id));
         Assert.Equal(["start-workday"], host.Search("start").Select(m => m.Workflow.Id));
         Assert.Equal(ProfileId.Work, host.Search("focus").Single().Profile.Id);
-        Assert.Equal(4, host.Search(string.Empty).Count);
+        Assert.Equal(5, host.Search(string.Empty).Count);
         Assert.Empty(host.Search("zzz-nothing"));
     }
 
@@ -115,11 +115,11 @@ public sealed class CoreHostTests : IDisposable
         Assert.False(work.IsActionAllowed(ProcessLaunchAction.ActionId));
         Assert.True(host.Profiles.Get(ProfileId.Personal).IsActionAllowed(ProcessLaunchAction.ActionId));
 
-        // focus-mode launches Notepad, so it fails to load under the narrowed Work profile; start-workday still loads.
+        // focus-mode launches Notepad and today-schedule reads the calendar, so both fail to load under the narrowed Work profile; start-workday still loads.
         var loaded = host.GetWorkflows(ProfileId.Work);
         Assert.Equal(["start-workday"], loaded.Workflows.Select(w => w.Id));
-        var error = Assert.Single(loaded.Errors);
-        Assert.EndsWith("focus-mode.json", error.Source, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(["focus-mode.json", "today-schedule.json"], loaded.Errors.Select(e => Path.GetFileName(e.Source)).Distinct().Order(StringComparer.OrdinalIgnoreCase));
+        var error = loaded.Errors.Single(e => e.Source.EndsWith("focus-mode.json", StringComparison.OrdinalIgnoreCase));
         Assert.Contains("not allowed in the Work profile", error.Message, StringComparison.Ordinal);
 
         // Defence in depth: even a definition that slipped past the loader is refused by the engine.
@@ -130,7 +130,7 @@ public sealed class CoreHostTests : IDisposable
     }
 
     [Fact]
-    public void A_broken_policy_file_is_reported_and_falls_back_to_every_action()
+    public void A_broken_policy_file_is_reported_and_falls_back_to_every_local_action_but_no_m365_action()
     {
         var personalDir = _root.Paths.GetProfileDirectory(ProfileId.Personal);
         Directory.CreateDirectory(personalDir);
@@ -141,6 +141,7 @@ public sealed class CoreHostTests : IDisposable
         var error = Assert.Single(host.Profiles.Errors);
         Assert.Contains("Unknown action 'windows.registry.write'", error.Message, StringComparison.Ordinal);
         Assert.True(host.Profiles.Get(ProfileId.Personal).IsActionAllowed(ProcessLaunchAction.ActionId));
+        Assert.False(host.Profiles.Get(ProfileId.Personal).IsActionAllowed(Core.Actions.M365.CalendarReadFileAction.ActionId));
     }
 
     [Fact]

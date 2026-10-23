@@ -20,6 +20,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -63,8 +64,69 @@
                    TextWrapping="Wrap"
                    Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
 
-        <!-- Interrupted runs waiting for the operator (spec §13 Needs attention) -->
+        <!-- Today: remaining events from the profile's calendar file (ADR-011, ADR-039) -->
         <Border Grid.Row="3"
+                Margin="6,6,6,0"
+                Padding="8"
+                BorderThickness="1"
+                BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
+                AutomationProperties.Name="Today">
+            <StackPanel>
+                <DockPanel LastChildFill="True">
+                    <Button DockPanel.Dock="Right"
+                            Content="_Refresh"
+                            Style="{StaticResource OgocButton}"
+                            Padding="10,2"
+                            MinHeight="28"
+                            Command="{Binding RefreshCalendarCommand}"
+                            AutomationProperties.Name="Refresh today's calendar"
+                            AutomationProperties.HelpText="Reads the calendar file again" />
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource OgocHeading}" Margin="0" Text="TODAY" />
+                        <TextBlock Text="{Binding TodayStatus}"
+                                   TextWrapping="Wrap"
+                                   FontSize="12"
+                                   Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                                   AutomationProperties.LiveSetting="Polite" />
+                    </StackPanel>
+                </DockPanel>
+                <ItemsControl ItemsSource="{Binding Today}"
+                              Margin="0,4,0,0"
+                              Focusable="False"
+                              KeyboardNavigation.TabNavigation="Continue"
+                              Visibility="{Binding HasTodayEvents, Converter={StaticResource BoolToVis}}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type local:TodayEvent}">
+                            <Grid Margin="0,1" AutomationProperties.Name="{Binding AutomationName}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="100" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{Binding Time}" FontFamily="Consolas" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                                    <Run Text="{Binding Subject, Mode=OneWay}" />
+                                    <Run Text="{Binding Detail, Mode=OneWay}" FontSize="12" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                                </TextBlock>
+                                <Button Grid.Column="2"
+                                        Content="Open"
+                                        Style="{StaticResource OgocButton}"
+                                        Padding="8,0"
+                                        MinHeight="24"
+                                        Margin="8,0,0,0"
+                                        Visibility="{Binding HasLink, Converter={StaticResource BoolToVis}}"
+                                        Command="{Binding DataContext.OpenEventCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        CommandParameter="{Binding}"
+                                        AutomationProperties.Name="{Binding Subject, StringFormat=Open {0}}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Border>
+
+        <!-- Interrupted runs waiting for the operator (spec §13 Needs attention) -->
+        <Border Grid.Row="4"
                 Margin="6,6,6,0"
                 Padding="8"
                 BorderThickness="2"
@@ -118,7 +180,7 @@
         </Border>
 
         <!-- Workflow files that did not validate -->
-        <Border Grid.Row="4"
+        <Border Grid.Row="5"
                 Margin="6,6,6,0"
                 Padding="8"
                 BorderThickness="1"
@@ -137,7 +199,7 @@
         </Border>
 
         <!-- Active execution -->
-        <Border Grid.Row="5"
+        <Border Grid.Row="6"
                 Margin="6,8,6,0"
                 Padding="10"
                 BorderThickness="2"
@@ -179,7 +241,7 @@
         </Border>
 
         <!-- Recent runs -->
-        <DockPanel Grid.Row="6" Margin="6,10,6,0">
+        <DockPanel Grid.Row="7" Margin="6,10,6,0">
             <TextBlock DockPanel.Dock="Top" Style="{StaticResource OgocHeading}" Text="RECENT RUNS" />
             <ListView ItemsSource="{Binding RecentRuns}"
                       Style="{StaticResource OgocList}"

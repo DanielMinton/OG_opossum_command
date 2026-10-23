@@ -15,6 +15,7 @@ app never starts anything on its own.
 |---|---|---|
 | `work/start-workday.json` | Work | Outlook on the web and Teams on the web in parallel, then the Documents folder. |
 | `work/focus-mode.json` | Work | Microsoft To Do on the web, then a focus-notes file in Notepad. |
+| `work/today-schedule.json` | Work | Reads the calendar file from your own Power Automate flow (`docs/POWER_AUTOMATE_FLOW.md`) and shows the Today panel. Reads one local file; no sign-in, no network. |
 | `personal/plan-tomorrow.json` | Personal | Personal calendar on the web, then a tomorrow-notes file in Notepad. |
 | `personal/hello-script.json` | Personal | Runs the trusted `scripts/personal/hello.cmd` with two arguments and keeps its output in History; shows `windows.script.run` and `aliases`. |
 

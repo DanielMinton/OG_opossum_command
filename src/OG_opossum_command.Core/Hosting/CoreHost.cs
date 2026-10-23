@@ -1,5 +1,6 @@
 using OG_opossum_command.Core.Actions;
 using OG_opossum_command.Core.Actions.Launchers;
+using OG_opossum_command.Core.Calendar;
 using OG_opossum_command.Core.Engine;
 using OG_opossum_command.Core.History;
 using OG_opossum_command.Core.Paths;
@@ -33,9 +34,11 @@ public sealed class CoreHost : IDisposable
     private readonly TimeProvider _time;
     private bool _disposed;
 
-    private CoreHost(IAppPaths paths, ActionRegistry actions, SqliteHistoryStore history, ProfileCatalog profiles, WorkflowEngine engine, TimeProvider time, IReadOnlyList<ProfileSeedingResult> seeding, IReadOnlyList<Guid> interrupted)
+    private CoreHost(IAppPaths paths, LauncherSet launchers, ActionRegistry actions, CalendarService calendar, SqliteHistoryStore history, ProfileCatalog profiles, WorkflowEngine engine, TimeProvider time, IReadOnlyList<ProfileSeedingResult> seeding, IReadOnlyList<Guid> interrupted)
     {
         Paths = paths;
+        Launchers = launchers;
+        Calendar = calendar;
         Actions = actions;
         History = history;
         Profiles = profiles;
@@ -48,7 +51,13 @@ public sealed class CoreHost : IDisposable
 
     public IAppPaths Paths { get; }
 
+    /// <summary>The launchers the actions are wired to; the UI uses <see cref="LauncherSet.Urls"/> for its own links so the smoke run never opens a browser.</summary>
+    public LauncherSet Launchers { get; }
+
     public ActionRegistry Actions { get; }
+
+    /// <summary>Calendar reads (ADR-039): the actions and the dashboard share this instance.</summary>
+    public CalendarService Calendar { get; }
 
     public SqliteHistoryStore History { get; }
 
@@ -106,7 +115,8 @@ public sealed class CoreHost : IDisposable
         {
             var now = clock.GetUtcNow();
             var interrupted = history.MarkInterrupted(now);
-            var actions = ActionRegistry.CreateDefault(launchers);
+            var calendar = new CalendarService(paths, clock);
+            var actions = ActionRegistry.CreateDefault(launchers, calendar);
             var profiles = ProfileCatalog.Load(paths, actions);
             foreach (var profile in profiles.Profiles)
             {
@@ -115,7 +125,7 @@ public sealed class CoreHost : IDisposable
 
             var seeding = FirstRunSeeder.Seed(profiles.Profiles, examplesRoot);
             var engine = new WorkflowEngine(actions, history, options.Engine, clock);
-            host = new CoreHost(paths, actions, history, profiles, engine, clock, seeding, interrupted);
+            host = new CoreHost(paths, launchers, actions, calendar, history, profiles, engine, clock, seeding, interrupted);
             foreach (var profile in profiles.Profiles)
             {
                 host.ReloadWorkflows(profile.Id, reconcileSchedules: false);

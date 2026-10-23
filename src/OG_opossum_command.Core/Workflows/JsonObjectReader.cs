@@ -64,6 +64,27 @@ public sealed class JsonObjectReader
     public string? OptionalString(string name) =>
         Element.TryGetProperty(name, out var value) ? ReadString(name, value) : null;
 
+    /// <summary>
+    /// An optional string for feeds that emit <c>null</c> or <c>""</c> for an empty field: absent, JSON null, and blank all
+    /// yield <c>null</c> without an error; any other non-string is an error. The value is trimmed.
+    /// </summary>
+    public string? OptionalText(string name)
+    {
+        if (!Element.TryGetProperty(name, out var value) || value.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        if (value.ValueKind != JsonValueKind.String)
+        {
+            _errors.Add(PathOf(name), $"'{name}' must be a string (or null).");
+            return null;
+        }
+
+        var text = value.GetString();
+        return string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+    }
+
     /// <summary>An optional integer within <paramref name="min"/>..<paramref name="max"/>; <c>null</c> when absent.</summary>
     public int? OptionalInt(string name, int min, int max)
     {

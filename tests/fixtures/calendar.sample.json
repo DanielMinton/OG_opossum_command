@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-22T15:45:00Z",
+  "source": "power-automate",
+  "timeZone": "Pacific Standard Time",
+  "events": [
+    {
+      "subject": "Team stand-up",
+      "start": "2026-10-22T09:00:00.0000000-07:00",
+      "end": "2026-10-22T09:15:00.0000000-07:00",
+      "isAllDay": false,
+      "location": "Microsoft Teams Meeting",
+      "link": "https://teams.microsoft.com/l/meetup-join/19%3ameeting_EXAMPLE%40thread.v2/0",
+      "showAs": "busy"
+    },
+    {
+      "subject": "Site walkthrough",
+      "start": "2026-10-22T19:00:00Z",
+      "end": "2026-10-22T20:30:00Z",
+      "isAllDay": false,
+      "location": "Main branch, front desk",
+      "link": "",
+      "showAs": "tentative"
+    },
+    {
+      "subject": "Staff appreciation week",
+      "start": "2026-10-22",
+      "end": "2026-10-23",
+      "isAllDay": true,
+      "location": null,
+      "link": null,
+      "showAs": "free"
+    },
+    {
+      "subject": "Budget review",
+      "start": "2026-10-23T10:00:00-07:00",
+      "end": "2026-10-23T11:00:00-07:00",
+      "isAllDay": false,
+      "location": "",
+      "link": "https://outlook.office.com/calendar/item/EXAMPLE",
+      "showAs": "busy"
+    }
+  ]
+}

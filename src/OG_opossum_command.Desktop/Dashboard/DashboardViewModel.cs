@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using OG_opossum_command.Core.Calendar;
 using OG_opossum_command.Core.Engine;
 using OG_opossum_command.Core.Hosting;
 using OG_opossum_command.Core.Profiles;
@@ -11,8 +12,9 @@ using OG_opossum_command.Core.Workflows;
 namespace OG_opossum_command.Desktop.Dashboard;
 
 /// <summary>
-/// The spec §14 dashboard: six tiles from the active profile, the active run with live step progress and a
-/// Cancel button, and recent runs. Engine events arrive on worker threads and are marshalled to the dispatcher.
+/// The spec §14 dashboard: six tiles from the active profile, a compact Today panel from the profile's calendar
+/// file (ADR-039), the active run with live step progress and a Cancel button, and recent runs. Engine and
+/// calendar events arrive on worker threads and are marshalled to the dispatcher.
 /// </summary>
 public sealed partial class DashboardViewModel : ObservableObject
 {
@@ -34,7 +36,18 @@ public sealed partial class DashboardViewModel : ObservableObject
         _host = host;
         _dispatcher = dispatcher;
         _host.Engine.ExecutionChanged += OnExecutionChanged;
+        _host.Calendar.Changed += OnCalendarChanged;
     }
+
+    /// <summary>The active profile's remaining events today (all-day first), from the latest calendar read.</summary>
+    public ObservableCollection<TodayEvent> Today { get; } = [];
+
+    /// <summary>One line under the Today heading: when the file was updated, or why there is nothing to show.</summary>
+    [ObservableProperty]
+    public partial string TodayStatus { get; set; } = "Calendar not read yet.";
+
+    [ObservableProperty]
+    public partial bool HasTodayEvents { get; set; }
 
     /// <summary>Exactly <see cref="TileCount"/> tiles for the active profile.</summary>
     public ObservableCollection<WorkflowTile> Tiles { get; } = [];
@@ -122,6 +135,13 @@ public sealed partial class DashboardViewModel : ObservableObject
         RefreshAttention();
         RefreshNextScheduled();
 
+        var latest = _host.Calendar.GetLatest(profile);
+        ApplyCalendar(latest);
+        if (latest is null)
+        {
+            _ = RefreshCalendarAsync();
+        }
+
         if (!_firstBind.Task.IsCompleted)
         {
             _ = _dispatcher.InvokeAsync(() => _firstBind.TrySetResult(), DispatcherPriority.Loaded);
@@ -160,6 +180,78 @@ public sealed partial class DashboardViewModel : ObservableObject
         NextScheduled = next is null
             ? string.Empty
             : string.Create(CultureInfo.CurrentCulture, $"Next scheduled: {next.WorkflowId} at {next.NextDueAt!.Value.ToLocalTime():ddd d MMM HH:mm}{(_host.Scheduler.IsPaused ? " (schedules paused)" : string.Empty)}");
+    }
+
+    /// <summary>
+    /// Re-reads the active profile's calendar file off the dispatcher. The result arrives through
+    /// <see cref="CalendarService.Changed"/>; a bad or missing file only changes the status line, never throws.
+    /// </summary>
+    [RelayCommand]
+    private async Task RefreshCalendarAsync()
+    {
+        var profile = _host.Profiles.Get(_profile);
+        TodayStatus = "Reading calendar…";
+        try
+        {
+            await Task.Run(() => _host.Calendar.ReadAsync(profile)).ConfigureAwait(true);
+        }
+        catch (ObjectDisposedException)
+        {
+            // Shutting down.
+        }
+    }
+
+    /// <summary>Opens an event's https link (Teams join or Outlook page) through the injectable opener, so smoke runs only record it.</summary>
+    [RelayCommand]
+    private void OpenEvent(TodayEvent? item)
+    {
+        if (item?.Link is null)
+        {
+            return;
+        }
+
+        _host.Launchers.Urls.Open(item.Link);
+        StatusMessage = $"Opened {item.Subject}.";
+    }
+
+    private void OnCalendarChanged(object? sender, CalendarReadResult result)
+    {
+        if (_dispatcher.HasShutdownStarted)
+        {
+            return;
+        }
+
+        _ = _dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>
+        {
+            if (result.Profile == _profile)
+            {
+                ApplyCalendar(result);
+            }
+        });
+    }
+
+    private void ApplyCalendar(CalendarReadResult? result)
+    {
+        Today.Clear();
+        if (result?.Snapshot is { } snapshot)
+        {
+            var now = DateTimeOffset.Now;
+            foreach (var item in snapshot.UpcomingOn(now))
+            {
+                Today.Add(TodayEvent.From(item, now));
+            }
+        }
+
+        HasTodayEvents = Today.Count > 0;
+        TodayStatus = result switch
+        {
+            null => "Calendar not read yet.",
+            { Status: CalendarStatus.Loaded } when Today.Count == 0 => $"Nothing else today. {result.Message}",
+            { Status: CalendarStatus.Unavailable or CalendarStatus.Invalid } => result.Message.StartsWith("Calendar unavailable", StringComparison.Ordinal)
+                ? result.Message
+                : $"Calendar unavailable. {result.Message}",
+            _ => result.Message,
+        };
     }
 
     /// <summary>Sets the feedback line (used by the command palette).</summary>
@@ -362,6 +454,27 @@ public sealed record WorkflowTile(string WorkflowId, string Name, string Descrip
             "Empty slot",
             $"Add a workflow file to {workflowsDirectory}",
             IsPlaceholder: true);
+}
+
+/// <summary>One row in the Today panel. Times are shown in local time.</summary>
+public sealed record TodayEvent(string Time, string Subject, string Detail, Uri? Link, bool IsNow)
+{
+    public bool HasLink => Link is not null;
+
+    /// <summary>Screen-reader name.</summary>
+    public string AutomationName => $"{Time}, {Subject}{(IsNow ? ", in progress" : string.Empty)}{(Detail.Length > 0 ? $", {Detail}" : string.Empty)}";
+
+    public static TodayEvent From(CalendarEvent item, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        var time = item.IsAllDay
+            ? "All day"
+            : string.Create(CultureInfo.CurrentCulture, $"{item.Start.ToLocalTime():HH:mm}–{item.End.ToLocalTime():HH:mm}");
+        var detail = item.ShowAs is "tentative" or "free" or "oof" or "workingelsewhere"
+            ? string.Join(" · ", new[] { item.Location, item.ShowAs }.Where(s => !string.IsNullOrEmpty(s)))
+            : item.Location ?? string.Empty;
+        return new TodayEvent(time, item.Subject, detail, item.Link, item.IsInProgressAt(now));
+    }
 }
 
 /// <summary>One run waiting for Resume / Dismiss.</summary>

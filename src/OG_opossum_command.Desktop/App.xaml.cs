@@ -6,6 +6,7 @@ using OG_opossum_command.Core.History;
 using OG_opossum_command.Core.Hosting;
 using OG_opossum_command.Core.Notifications;
 using OG_opossum_command.Core.Paths;
+using OG_opossum_command.Core.Profiles;
 using OG_opossum_command.Core.Seeding;
 using OG_opossum_command.Desktop.CommandPalette;
 using OG_opossum_command.Desktop.Shell;
@@ -19,7 +20,7 @@ namespace OG_opossum_command.Desktop;
 /// for <c>--smoke-ui</c>.
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable", Justification = "WPF Application is not IDisposable; the tray icon, hotkey, and notifications are disposed in OnExit and in Quit.")]
-public partial class App : Application
+public partial class App : Application, IDashboardPresenter
 {
     private TrayIcon? _tray;
     private GlobalHotkey? _hotkey;
@@ -57,6 +58,26 @@ public partial class App : Application
         }
 
         MainWindow.Activate();
+    }
+
+    /// <summary>
+    /// <c>dashboard.schedule.show</c> (ADR-039): switch to the run's profile, show the dashboard with its Today panel,
+    /// and bring the window forward. Engine worker threads call this, so it marshals to the dispatcher. Smoke runs
+    /// never get here: they wire a recording presenter instead (rule 7).
+    /// </summary>
+    void IDashboardPresenter.ShowSchedule(ProfileId profile)
+    {
+        _ = Dispatcher.BeginInvoke(() =>
+        {
+            if (Shell is null || _quitting)
+            {
+                return;
+            }
+
+            Shell.ActiveProfile = profile;
+            Shell.ShowDashboardCommand.Execute(null);
+            ShowDashboard();
+        });
     }
 
     /// <summary>Opens the command palette (hotkey, tray menu, Settings), or brings the open one forward.</summary>
@@ -126,7 +147,7 @@ public partial class App : Application
         var paths = PathsOverride ?? AppPaths.FromEnvironment();
         try
         {
-            Host = CoreHost.Open(paths, LaunchersOverride ?? LauncherSet.Windows(), FirstRunSeeder.DefaultExamplesRoot);
+            Host = CoreHost.Open(paths, LaunchersOverride ?? LauncherSet.Windows(this), FirstRunSeeder.DefaultExamplesRoot);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -227,6 +248,7 @@ public partial class App : Application
             _tray?.Dispose();
             _tray = null;
             Console.WriteLine($"smoke-ui: window loaded, dashboard bound ({Shell.Dashboard.Tiles.Count} tiles), tray icon created and disposed");
+            Console.WriteLine($"smoke-ui: today panel bound ({Shell.Dashboard.Today.Count} event(s)): {Shell.Dashboard.TodayStatus}");
             Console.WriteLine($"smoke-ui: settings view bound ({Shell.Settings.Schedules.Count} schedule(s)), command palette shown off-screen with {paletteItems} item(s) and closed, hotkey not registered");
             _quitting = true;
             Shutdown(0);

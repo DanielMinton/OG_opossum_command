@@ -1,12 +1,13 @@
 namespace OG_opossum_command.Core.Profiles;
 
 /// <summary>
-/// A context (Work or Personal) with its own workflow folder, trusted scripts folder, history scope, and action
-/// allowlist. The engine refuses any step whose action is not in <see cref="AllowedActionIds"/> (ADR-012).
+/// A context (Work or Personal) with its own workflow folder, trusted scripts folder, history scope, action
+/// allowlist, and optional calendar file. The engine refuses any step whose action is not in
+/// <see cref="AllowedActionIds"/> (ADR-012).
 /// </summary>
 public sealed class Profile
 {
-    public Profile(ProfileId id, string workflowsDirectory, string scriptsDirectory, IEnumerable<string> allowedActionIds)
+    public Profile(ProfileId id, string workflowsDirectory, string scriptsDirectory, IEnumerable<string> allowedActionIds, string? calendarFilePath = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workflowsDirectory);
         ArgumentException.ThrowIfNullOrWhiteSpace(scriptsDirectory);
@@ -16,6 +17,7 @@ public sealed class Profile
         WorkflowsDirectory = workflowsDirectory;
         ScriptsDirectory = scriptsDirectory;
         AllowedActionIds = new HashSet<string>(allowedActionIds, StringComparer.Ordinal);
+        CalendarFilePath = string.IsNullOrWhiteSpace(calendarFilePath) ? null : calendarFilePath.Trim();
     }
 
     /// <summary>Which profile this is.</summary>
@@ -32,6 +34,12 @@ public sealed class Profile
 
     /// <summary>Stable action IDs this profile may run. Anything else is refused by the engine.</summary>
     public IReadOnlySet<string> AllowedActionIds { get; }
+
+    /// <summary>
+    /// The JSON schedule file <c>m365.calendar.readFile</c> reads for this profile (ADR-011, ADR-039), possibly with
+    /// <c>%VAR%</c> references that are expanded at read time; <c>null</c> when the profile has no calendar.
+    /// </summary>
+    public string? CalendarFilePath { get; }
 
     /// <summary>Whether <paramref name="actionId"/> may run under this profile.</summary>
     public bool IsActionAllowed(string actionId) => AllowedActionIds.Contains(actionId);

@@ -11,7 +11,8 @@ public sealed class RecordingLaunchers
         Processes = new RecordingProcessLauncher();
         Urls = new RecordingUrlOpener();
         Folders = new RecordingFolderOpener();
-        Set = new LauncherSet(Processes, Urls, Folders);
+        Dashboard = new RecordingDashboardPresenter();
+        Set = new LauncherSet(Processes, Urls, Folders, Dashboard);
     }
 
     public RecordingProcessLauncher Processes { get; }
@@ -20,11 +21,39 @@ public sealed class RecordingLaunchers
 
     public RecordingFolderOpener Folders { get; }
 
+    public RecordingDashboardPresenter Dashboard { get; }
+
     /// <summary>The set to hand to <see cref="ActionRegistry.CreateDefault"/>.</summary>
     public LauncherSet Set { get; }
 
-    /// <summary>Total recorded side effects across all three launchers.</summary>
-    public int TotalCalls => Processes.Requests.Count + Urls.Opened.Count + Folders.Opened.Count;
+    /// <summary>Total recorded side effects across all four launchers.</summary>
+    public int TotalCalls => Processes.Requests.Count + Urls.Opened.Count + Folders.Opened.Count + Dashboard.Shown.Count;
+}
+
+/// <summary>Records which profile's schedule was asked for instead of showing a window.</summary>
+public sealed class RecordingDashboardPresenter : IDashboardPresenter
+{
+    private readonly List<Profiles.ProfileId> _shown = [];
+    private readonly Lock _gate = new();
+
+    public IReadOnlyList<Profiles.ProfileId> Shown
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _shown.ToArray();
+            }
+        }
+    }
+
+    public void ShowSchedule(Profiles.ProfileId profile)
+    {
+        lock (_gate)
+        {
+            _shown.Add(profile);
+        }
+    }
 }
 
 /// <summary>Records launch requests; each returns a fake process that exits immediately with code 0 unless <see cref="Behavior"/> says otherwise.</summary>
