@@ -79,6 +79,12 @@ public static class SettingKeys
     /// <summary><c>true</c> suppresses every notification below Error (quiet mode, spec §14).</summary>
     public const string QuietMode = "ui.quietMode";
 
+    /// <summary><c>false</c> turns off the click and run-result sounds (on when unset; ADR-057).</summary>
+    public const string Sounds = "ui.sounds";
+
+    /// <summary><c>false</c> turns off animations (on when unset, and always off when Windows animation effects are off; ADR-057).</summary>
+    public const string Motion = "ui.motion";
+
     /// <summary>The command-palette hotkey, e.g. <c>Ctrl+Alt+Space</c>.</summary>
     public const string Hotkey = "ui.hotkey";
 

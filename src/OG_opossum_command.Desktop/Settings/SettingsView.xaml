@@ -11,7 +11,7 @@
              AutomationProperties.Name="Settings">
     <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False" Padding="0,0,8,0">
         <StackPanel>
-            <Border Style="{StaticResource OgocCard}">
+            <Border Style="{StaticResource OgocCard}" a11y:Motion.Entrance="True">
                 <StackPanel>
                     <TextBlock Style="{StaticResource OgocHeading}" Text="Command palette hotkey" />
                     <!-- Declared label, box, button so Tab order matches what is on screen. -->
@@ -43,7 +43,33 @@
                 </StackPanel>
             </Border>
 
-            <Border Style="{StaticResource OgocCard}">
+            <Border Style="{StaticResource OgocCard}" a11y:Motion.Entrance="True" a11y:Motion.EntranceDelay="40">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource OgocHeading}" Text="Look and sound" />
+                    <CheckBox Content="Play _sounds (a soft tick on click, a chime when a run finishes; in quiet mode only failures)"
+                              IsChecked="{Binding Sounds}"
+                              Margin="0,0,0,6"
+                              FocusVisualStyle="{StaticResource OgocFocusVisual}"
+                              AutomationProperties.Name="Play sounds" />
+                    <CheckBox Content="A_nimations (cards slide in, tiles lift on hover, numbers count up)"
+                              IsChecked="{Binding Animations}"
+                              FocusVisualStyle="{StaticResource OgocFocusVisual}"
+                              AutomationProperties.Name="Animations" />
+                    <TextBlock Text="{Binding AnimationsNote}" Margin="0,4,0,0">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource OgocCaption}">
+                                <Style.Triggers>
+                                    <Trigger Property="Text" Value="">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource OgocCard}" a11y:Motion.Entrance="True" a11y:Motion.EntranceDelay="80">
                 <StackPanel>
                     <TextBlock Style="{StaticResource OgocHeading}" Text="Notifications and schedules" />
                     <CheckBox Content="_Quiet mode (only failures and runs that need attention show a notification)"

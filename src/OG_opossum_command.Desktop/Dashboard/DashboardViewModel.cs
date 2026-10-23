@@ -6,9 +6,11 @@ using CommunityToolkit.Mvvm.Input;
 using OG_opossum_command.Core.Calendar;
 using OG_opossum_command.Core.Engine;
 using OG_opossum_command.Core.Exports;
+using OG_opossum_command.Core.Feedback;
 using OG_opossum_command.Core.Hosting;
 using OG_opossum_command.Core.Profiles;
 using OG_opossum_command.Core.Workflows;
+using OG_opossum_command.Desktop.Feedback;
 
 namespace OG_opossum_command.Desktop.Dashboard;
 
@@ -23,6 +25,9 @@ public sealed partial class DashboardViewModel : ObservableObject
     public const int TileCount = 6;
 
     private const int RecentRunLimit = 8;
+
+    /// <summary>How many recent runs are read to count today's (more than a day's runs is unusual for a personal tool).</summary>
+    private const int TodayScanLimit = 200;
 
     private readonly CoreHost _host;
     private readonly Dispatcher _dispatcher;
@@ -90,7 +95,7 @@ public sealed partial class DashboardViewModel : ObservableObject
 
     /// <summary>The run shown in the Active execution panel, or <c>null</c>.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasActiveRun), nameof(CanCancel), nameof(ActiveTitle), nameof(ActiveProgress), nameof(ActiveHeadline))]
+    [NotifyPropertyChangedFor(nameof(HasActiveRun), nameof(CanCancel), nameof(ActiveTitle), nameof(ActiveProgress), nameof(ActiveHeadline), nameof(ActiveFraction))]
     [NotifyCanExecuteChangedFor(nameof(CancelCommand))]
     public partial ExecutionSnapshot? ActiveRun { get; set; }
 
@@ -124,7 +129,12 @@ public sealed partial class DashboardViewModel : ObservableObject
         Tiles.Clear();
         foreach (var workflow in loaded.Workflows.Take(TileCount))
         {
-            Tiles.Add(WorkflowTile.For(workflow));
+            Tiles.Add(WorkflowTile.For(workflow, Tiles.Count));
+        }
+
+        foreach (var running in _host.Engine.ActiveExecutions.Where(e => e.Profile == profile))
+        {
+            SetTileState(running.WorkflowId, TileState.Running);
         }
 
         while (Tiles.Count < TileCount)
@@ -166,14 +176,79 @@ public sealed partial class DashboardViewModel : ObservableObject
         }
     }
 
-    /// <summary>Re-reads recent runs for the active profile from history.</summary>
+    /// <summary>Re-reads recent runs and today's numbers for the active profile from history.</summary>
     public void RefreshRecentRuns()
     {
+        var recent = _host.History.GetRecentExecutions(_profile, TodayScanLimit);
         RecentRuns.Clear();
-        foreach (var execution in _host.History.GetRecentExecutions(_profile, RecentRunLimit))
+        foreach (var execution in recent.Take(RecentRunLimit))
         {
             RecentRuns.Add(RunSummary.From(execution));
         }
+
+        var today = DateTime.Today;
+        var finishedToday = recent
+            .Where(e => !e.IsActive && (e.StartedAt ?? e.QueuedAt).ToLocalTime().Date == today)
+            .ToList();
+        RunsToday = finishedToday.Count;
+        var succeeded = finishedToday.Count(e => e.Status == ExecutionStatus.Completed);
+        SuccessRate = finishedToday.Count == 0 ? double.NaN : Math.Round(100.0 * succeeded / finishedToday.Count);
+    }
+
+    /// <summary>Finished runs today in the active profile (the first headline number).</summary>
+    [ObservableProperty]
+    public partial double RunsToday { get; set; }
+
+    /// <summary>Percent of today's finished runs that completed; NaN (shown as a dash) when none finished.</summary>
+    [ObservableProperty]
+    public partial double SuccessRate { get; set; } = double.NaN;
+
+    /// <summary>Runs waiting for Resume or Dismiss, as a number for the headline row.</summary>
+    [ObservableProperty]
+    public partial double AttentionCount { get; set; }
+
+    /// <summary>The next scheduled workflow's name, or a dash.</summary>
+    [ObservableProperty]
+    public partial string NextUpName { get; set; } = "—";
+
+    /// <summary>When the next scheduled workflow runs, or why nothing is scheduled.</summary>
+    [ObservableProperty]
+    public partial string NextUpWhen { get; set; } = "Nothing scheduled";
+
+    /// <summary>Settled steps of the shown run as a fraction, for the progress bar.</summary>
+    public double ActiveFraction => ActiveRun is { Steps.Count: > 0 } run ? (double)run.SettledStepCount / run.Steps.Count : 0;
+
+    /// <summary>Ctrl+1..6: runs the tile at that position (1-based, as printed on the card).</summary>
+    [RelayCommand]
+    private void RunAt(string? position)
+    {
+        if (int.TryParse(position, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) && n >= 1 && n <= Tiles.Count)
+        {
+            Run(Tiles[n - 1]);
+        }
+    }
+
+    private void SetTileState(string workflowId, TileState state)
+    {
+        foreach (var tile in Tiles.Where(t => !t.IsPlaceholder && t.WorkflowId == workflowId))
+        {
+            tile.State = state;
+        }
+    }
+
+    /// <summary>Shows Done or Failed on the tile for a few seconds, then returns it to idle (unless it started again).</summary>
+    private void FlashTileResult(string workflowId, TileState state)
+    {
+        SetTileState(workflowId, state);
+        var timer = new DispatcherTimer(TimeSpan.FromSeconds(3), DispatcherPriority.Background, (s, _) =>
+        {
+            ((DispatcherTimer)s!).Stop();
+            foreach (var tile in Tiles.Where(t => t.WorkflowId == workflowId && t.State == state))
+            {
+                tile.State = TileState.Idle;
+            }
+        }, _dispatcher);
+        timer.Start();
     }
 
     /// <summary>Re-reads the runs that need attention.</summary>
@@ -186,6 +261,7 @@ public sealed partial class DashboardViewModel : ObservableObject
         }
 
         HasAttention = Attention.Count > 0;
+        AttentionCount = Attention.Count;
     }
 
     /// <summary>Re-reads the next schedule occurrence for the active profile.</summary>
@@ -198,6 +274,19 @@ public sealed partial class DashboardViewModel : ObservableObject
         NextScheduled = next is null
             ? string.Empty
             : string.Create(CultureInfo.CurrentCulture, $"Next scheduled: {next.WorkflowId} at {next.NextDueAt!.Value.ToLocalTime():ddd d MMM HH:mm}{(_host.Scheduler.IsPaused ? " (schedules paused)" : string.Empty)}");
+        if (next is null)
+        {
+            NextUpName = "—";
+            NextUpWhen = "Nothing scheduled";
+        }
+        else
+        {
+            var due = next.NextDueAt!.Value.ToLocalTime();
+            NextUpName = Tiles.FirstOrDefault(t => t.WorkflowId == next.WorkflowId)?.Name ?? next.WorkflowId;
+            NextUpWhen = (due.Date == DateTime.Today
+                ? due.ToString("'Today' HH:mm", CultureInfo.CurrentCulture)
+                : due.ToString("ddd d MMM HH:mm", CultureInfo.CurrentCulture)) + (_host.Scheduler.IsPaused ? " · paused" : string.Empty);
+        }
     }
 
     /// <summary>
@@ -395,6 +484,11 @@ public sealed partial class DashboardViewModel : ObservableObject
             StatusMessage = started.WasAlreadyRunning
                 ? $"{tile.Name} is already running; showing that run."
                 : $"Queued {tile.Name}.";
+            UiFeedback.Play(started.WasAlreadyRunning ? SoundCue.Tap : SoundCue.Start);
+            if (started.Execution.IsActive)
+            {
+                tile.State = TileState.Running;
+            }
         }
         catch (ActionNotAllowedException ex)
         {
@@ -441,6 +535,21 @@ public sealed partial class DashboardViewModel : ObservableObject
         if (snapshot.Profile != _profile)
         {
             return;
+        }
+
+        if (snapshot.IsActive)
+        {
+            SetTileState(snapshot.WorkflowId, TileState.Running);
+        }
+        else
+        {
+            var ok = snapshot.Status == ExecutionStatus.Completed;
+            var bad = snapshot.Status is ExecutionStatus.Failed or ExecutionStatus.NeedsAttention or ExecutionStatus.Interrupted;
+            FlashTileResult(snapshot.WorkflowId, ok ? TileState.Succeeded : bad ? TileState.Failed : TileState.Idle);
+            if (ok || bad)
+            {
+                UiFeedback.Play(ok ? SoundCue.Success : SoundCue.Failure);
+            }
         }
 
         if (ActiveRun is null || ActiveRun.Id == snapshot.Id)
@@ -501,20 +610,67 @@ public sealed partial class DashboardViewModel : ObservableObject
     };
 }
 
-/// <summary>One dashboard tile: a workflow, or a disabled placeholder that keeps the grid stable.</summary>
-public sealed record WorkflowTile(string WorkflowId, string Name, string Description, bool IsPlaceholder)
+/// <summary>What a tile shows on its badge (ADR-057).</summary>
+public enum TileState
 {
+    Idle,
+    Running,
+    Succeeded,
+    Failed,
+}
+
+/// <summary>
+/// One dashboard tile: a workflow, or a disabled placeholder that keeps the grid stable. <see cref="State"/> follows
+/// the tile's latest run: Running while active, then Succeeded or Failed for a few seconds, then Idle again.
+/// </summary>
+public sealed partial class WorkflowTile : ObservableObject
+{
+    private WorkflowTile(string workflowId, string name, string description, bool isPlaceholder, int index)
+    {
+        WorkflowId = workflowId;
+        Name = name;
+        Description = description;
+        IsPlaceholder = isPlaceholder;
+        Shortcut = string.Create(CultureInfo.InvariantCulture, $"Ctrl+{index + 1}");
+    }
+
+    public string WorkflowId { get; }
+
+    public string Name { get; }
+
+    public string Description { get; }
+
+    public bool IsPlaceholder { get; }
+
     public bool IsEnabled => !IsPlaceholder;
 
+    /// <summary>The keyboard shortcut that runs this tile, shown on the card.</summary>
+    public string Shortcut { get; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AutomationName), nameof(StateText))]
+    public partial TileState State { get; set; }
+
+    /// <summary>A short word under the name while the tile is not idle.</summary>
+    public string StateText => State switch
+    {
+        TileState.Running => "Running",
+        TileState.Succeeded => "Done",
+        TileState.Failed => "Failed",
+        _ => string.Empty,
+    };
+
     /// <summary>Screen-reader name.</summary>
-    public string AutomationName => IsPlaceholder ? $"{Name}. {Description}" : $"Run {Name}";
+    public string AutomationName => IsPlaceholder
+        ? $"{Name}. {Description}"
+        : State == TileState.Idle ? $"Run {Name}, {Shortcut}" : $"Run {Name}, {StateText}, {Shortcut}";
 
     public override string ToString() => AutomationName;
 
-    public static WorkflowTile For(WorkflowDefinition workflow)
+    public static WorkflowTile For(WorkflowDefinition workflow, int index)
     {
         ArgumentNullException.ThrowIfNull(workflow);
-        return new WorkflowTile(workflow.Id, workflow.Name, workflow.Description ?? string.Empty, IsPlaceholder: false);
+        return new WorkflowTile(workflow.Id, workflow.Name, workflow.Description ?? string.Empty, isPlaceholder: false, index);
     }
 
     public static WorkflowTile Placeholder(int index, string workflowsDirectory) =>
@@ -522,7 +678,8 @@ public sealed record WorkflowTile(string WorkflowId, string Name, string Descrip
             string.Create(CultureInfo.InvariantCulture, $"<empty-{index}>"),
             "Empty slot",
             $"Add a workflow file to {workflowsDirectory}",
-            IsPlaceholder: true);
+            isPlaceholder: true,
+            index);
 }
 
 /// <summary>One row in the Today panel. Times are shown in local time.</summary>
@@ -591,6 +748,15 @@ public sealed record AttentionItem(Guid Id, string WorkflowName, string Profile,
 /// <summary>One line in the Active execution panel.</summary>
 public sealed record StepRow(string Glyph, string Text, string Status)
 {
+    /// <summary><c>ok</c>, <c>bad</c>, <c>active</c> or <c>idle</c>: picks the step dot's colour.</summary>
+    public string Kind => Status switch
+    {
+        nameof(StepStatus.Completed) => "ok",
+        nameof(StepStatus.Failed) or nameof(StepStatus.Interrupted) => "bad",
+        nameof(StepStatus.Running) => "active",
+        _ => "idle",
+    };
+
     /// <summary>Screen-reader name: the step text and its status.</summary>
     public string AutomationName => $"{Text}, {Status}";
 
@@ -620,6 +786,16 @@ public sealed record StepRow(string Glyph, string Text, string Status)
 /// <summary>One line in Recent runs / History.</summary>
 public sealed record RunSummary(Guid Id, string WorkflowName, string Status, string When, string Summary)
 {
+    /// <summary><c>ok</c>, <c>bad</c>, <c>warn</c>, <c>active</c> or <c>idle</c>: picks the status chip's colour.</summary>
+    public string Kind => Status switch
+    {
+        "Completed" => "ok",
+        "Failed" => "bad",
+        "Needs attention" or "Interrupted" => "warn",
+        "Queued" or "Running" or "Cancelling" => "active",
+        _ => "idle",
+    };
+
     /// <summary>Screen-reader name.</summary>
     public string AutomationName => $"{WorkflowName}, {Status}, {When}, {Summary}";
 

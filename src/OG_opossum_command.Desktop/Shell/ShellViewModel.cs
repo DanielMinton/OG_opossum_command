@@ -59,15 +59,31 @@ public sealed partial class ShellViewModel : ObservableObject
     public partial string HostStatus { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(PageTitle), nameof(IsDashboardPage), nameof(IsHistoryPage), nameof(IsSettingsPage))]
+    [NotifyPropertyChangedFor(nameof(PageTitle), nameof(PageSubtitle), nameof(IsDashboardPage), nameof(IsHistoryPage), nameof(IsSettingsPage))]
     public partial object CurrentView { get; set; }
 
-    /// <summary>Title shown above the current view.</summary>
+    /// <summary>Title shown above the current view: a greeting on the dashboard, the page name elsewhere.</summary>
     public string PageTitle => CurrentView switch
     {
         HistoryViewModel => "History",
         SettingsViewModel => "Settings",
-        _ => "Dashboard",
+        _ => Greeting(DateTime.Now),
+    };
+
+    /// <summary>One quiet line under the title: today's date on the dashboard, what the page is for elsewhere.</summary>
+    public string PageSubtitle => CurrentView switch
+    {
+        HistoryViewModel => "Every run, newest first. Select one to see its steps and events.",
+        SettingsViewModel => "How the app looks, sounds and behaves.",
+        _ => DateTime.Now.ToString("dddd d MMMM", CultureInfo.CurrentCulture),
+    };
+
+    internal static string Greeting(DateTime now) => now.Hour switch
+    {
+        < 5 => "Working late",
+        < 12 => "Good morning",
+        < 17 => "Good afternoon",
+        _ => "Good evening",
     };
 
     /// <summary>Which navigation item is selected (one-way to the nav rail).</summary>
@@ -128,6 +144,7 @@ public sealed partial class ShellViewModel : ObservableObject
     {
         Dashboard.RefreshRecentRuns();
         Dashboard.RefreshAttention();
+        Dashboard.RefreshNextScheduled();
         CurrentView = Dashboard;
     }
 

@@ -10,6 +10,7 @@ using OG_opossum_command.Core.Profiles;
 using OG_opossum_command.Core.Seeding;
 using OG_opossum_command.Desktop.Accessibility;
 using OG_opossum_command.Desktop.CommandPalette;
+using OG_opossum_command.Desktop.Feedback;
 using OG_opossum_command.Desktop.Shell;
 using OG_opossum_command.Desktop.Smoke;
 using OG_opossum_command.Desktop.Tray;
@@ -27,6 +28,7 @@ public partial class App : Application, IDashboardPresenter
     private TrayIcon? _tray;
     private GlobalHotkey? _hotkey;
     private NotificationService? _notifications;
+    private SoundCuePlayer? _sounds;
     private CommandPaletteWindow? _palette;
     private bool _quitting;
 
@@ -128,6 +130,7 @@ public partial class App : Application, IDashboardPresenter
 
         _quitting = true;
         _hotkey?.Dispose();
+        _sounds?.Dispose();
         _hotkey = null;
         _tray?.Dispose();
         _tray = null;
@@ -170,6 +173,18 @@ public partial class App : Application, IDashboardPresenter
         INotificationSink sink = SmokeUi ? new RecordingNotificationSink() : new TrayNotificationSink(Dispatcher, () => _tray?.Icon);
         _notifications = new NotificationService(Host.History, sink, Host.Engine, Host.Scheduler);
 
+        // Motion and sound (ADR-057). Smoke runs snapshot the final frame and stay silent.
+        Motion.ForceDisabled = SmokeUi;
+        Motion.ApplySetting(Host.History.GetSetting(SettingKeys.Motion));
+        if (!SmokeUi)
+        {
+            _sounds = new SoundCuePlayer();
+            var history = Host.History;
+            var notifications = _notifications;
+            UiFeedback.Install(_sounds, () => history.GetSetting(SettingKeys.Sounds), () => notifications.QuietMode);
+            _ = _sounds.LoadAsync();
+        }
+
         Shell = new ShellViewModel(Host, Dispatcher, this, _notifications);
         var window = new MainWindow { DataContext = Shell };
         MainWindow = window;
@@ -208,6 +223,7 @@ public partial class App : Application, IDashboardPresenter
     protected override void OnExit(ExitEventArgs e)
     {
         _hotkey?.Dispose();
+        _sounds?.Dispose();
         _tray?.Dispose();
         _notifications?.Dispose();
         Host?.Dispose();

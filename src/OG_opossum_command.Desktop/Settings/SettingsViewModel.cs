@@ -4,12 +4,14 @@ using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using OG_opossum_command.Core.Exports;
+using OG_opossum_command.Core.Feedback;
 using OG_opossum_command.Core.History;
 using OG_opossum_command.Core.Hosting;
 using OG_opossum_command.Core.Notifications;
 using OG_opossum_command.Core.Profiles;
 using OG_opossum_command.Core.Scheduling;
 using OG_opossum_command.Desktop.CommandPalette;
+using OG_opossum_command.Desktop.Feedback;
 
 namespace OG_opossum_command.Desktop.Settings;
 
@@ -113,6 +115,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         _dispatcher = dispatcher;
         HotkeyText = host.History.GetSetting(SettingKeys.Hotkey) ?? HotkeyGesture.DefaultText;
         QuietMode = notifications.QuietMode;
+        Sounds = FeedbackPolicy.IsOn(host.History.GetSetting(SettingKeys.Sounds));
+        Animations = FeedbackPolicy.IsOn(host.History.GetSetting(SettingKeys.Motion));
         SchedulesPaused = host.Scheduler.IsPaused;
         DataRoot = host.Paths.DataRoot;
         HotkeyStatus = string.Empty;
@@ -140,6 +144,42 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     public partial bool SchedulesPaused { get; set; }
+
+    /// <summary>Click and run-result sounds (ADR-057). In quiet mode only failures are heard.</summary>
+    [ObservableProperty]
+    public partial bool Sounds { get; set; }
+
+    /// <summary>Animations (ADR-057). Windows "Animation effects" off or high contrast on still turns them off.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AnimationsNote))]
+    public partial bool Animations { get; set; }
+
+    /// <summary>Explains when Windows is holding animations off even though the setting is on.</summary>
+    public string AnimationsNote => Animations && !Accessibility.Motion.IsEnabled
+        ? "Windows has animation effects off or high contrast on, so nothing moves. That setting wins."
+        : string.Empty;
+
+    partial void OnSoundsChanged(bool value)
+    {
+        if (_ready)
+        {
+            _host.History.SetSetting(SettingKeys.Sounds, value ? "true" : "false");
+            if (value)
+            {
+                UiFeedback.Play(SoundCue.Success);
+            }
+        }
+    }
+
+    partial void OnAnimationsChanged(bool value)
+    {
+        if (_ready)
+        {
+            var setting = value ? "true" : "false";
+            _host.History.SetSetting(SettingKeys.Motion, setting);
+            Accessibility.Motion.ApplySetting(setting);
+        }
+    }
 
     [ObservableProperty]
     public partial string DataRoot { get; set; }
