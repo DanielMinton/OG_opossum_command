@@ -48,6 +48,16 @@ public sealed partial class DashboardViewModel : ObservableObject
     /// <summary>Steps of <see cref="ActiveRun"/>, in order.</summary>
     public ObservableCollection<StepRow> ActiveSteps { get; } = [];
 
+    /// <summary>Interrupted runs waiting for Resume or Dismiss (spec §13, ADR-035), newest first, across both profiles.</summary>
+    public ObservableCollection<AttentionItem> Attention { get; } = [];
+
+    /// <summary>One line about the next schedule occurrence in the active profile; empty when none.</summary>
+    [ObservableProperty]
+    public partial string NextScheduled { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial bool HasAttention { get; set; }
+
     /// <summary>Completes once the first profile has been bound and the dispatcher has processed layout (used by <c>--smoke-ui</c>).</summary>
     public Task FirstBindCompleted => _firstBind.Task;
 
@@ -109,6 +119,8 @@ public sealed partial class DashboardViewModel : ObservableObject
 
         SetActiveRun(_host.Engine.ActiveExecutions.LastOrDefault(e => e.Profile == profile));
         RefreshRecentRuns();
+        RefreshAttention();
+        RefreshNextScheduled();
 
         if (!_firstBind.Task.IsCompleted)
         {
@@ -124,6 +136,88 @@ public sealed partial class DashboardViewModel : ObservableObject
         {
             RecentRuns.Add(RunSummary.From(execution));
         }
+    }
+
+    /// <summary>Re-reads the runs that need attention.</summary>
+    public void RefreshAttention()
+    {
+        Attention.Clear();
+        foreach (var execution in _host.NeedsAttention)
+        {
+            Attention.Add(AttentionItem.From(execution));
+        }
+
+        HasAttention = Attention.Count > 0;
+    }
+
+    /// <summary>Re-reads the next schedule occurrence for the active profile.</summary>
+    public void RefreshNextScheduled()
+    {
+        var next = _host.Scheduler.Triggers
+            .Where(t => t.Profile == _profile && t.Enabled && t.NextDueAt is not null)
+            .OrderBy(t => t.NextDueAt)
+            .FirstOrDefault();
+        NextScheduled = next is null
+            ? string.Empty
+            : string.Create(CultureInfo.CurrentCulture, $"Next scheduled: {next.WorkflowId} at {next.NextDueAt!.Value.ToLocalTime():ddd d MMM HH:mm}{(_host.Scheduler.IsPaused ? " (schedules paused)" : string.Empty)}");
+    }
+
+    /// <summary>Sets the feedback line (used by the command palette).</summary>
+    public void ShowMessage(string message) => StatusMessage = message ?? string.Empty;
+
+    /// <summary>Resume an interrupted run: a new run that skips the steps already completed (ADR-035).</summary>
+    [RelayCommand]
+    private void Resume(AttentionItem? item)
+    {
+        if (item is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var started = _host.Resume(item.Id);
+            SetActiveRun(started.Execution);
+            StatusMessage = $"Resumed {item.WorkflowName} as a new run.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            StatusMessage = ex.Message;
+        }
+        catch (KeyNotFoundException ex)
+        {
+            StatusMessage = ex.Message;
+        }
+
+        RefreshAttention();
+        RefreshRecentRuns();
+    }
+
+    /// <summary>Dismiss an interrupted run: nothing is re-run.</summary>
+    [RelayCommand]
+    private void Dismiss(AttentionItem? item)
+    {
+        if (item is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _host.Dismiss(item.Id);
+            StatusMessage = $"Dismissed {item.WorkflowName}; nothing was re-run.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            StatusMessage = ex.Message;
+        }
+        catch (KeyNotFoundException ex)
+        {
+            StatusMessage = ex.Message;
+        }
+
+        RefreshAttention();
+        RefreshRecentRuns();
     }
 
     /// <summary>Tile click: start the workflow, or show the run that is already active (focus-existing).</summary>
@@ -168,7 +262,7 @@ public sealed partial class DashboardViewModel : ObservableObject
 
     private void OnExecutionChanged(object? sender, ExecutionSnapshot snapshot)
     {
-        if (_dispatcher.HasShutdownStarted || snapshot.Profile != _profile)
+        if (_dispatcher.HasShutdownStarted)
         {
             return;
         }
@@ -178,6 +272,13 @@ public sealed partial class DashboardViewModel : ObservableObject
 
     private void ApplyChange(ExecutionSnapshot snapshot)
     {
+        if (!snapshot.IsActive)
+        {
+            // Any finished run may have changed the attention list (recovery) or fired a schedule.
+            RefreshAttention();
+            RefreshNextScheduled();
+        }
+
         if (snapshot.Profile != _profile)
         {
             return;
@@ -261,6 +362,20 @@ public sealed record WorkflowTile(string WorkflowId, string Name, string Descrip
             "Empty slot",
             $"Add a workflow file to {workflowsDirectory}",
             IsPlaceholder: true);
+}
+
+/// <summary>One run waiting for Resume / Dismiss.</summary>
+public sealed record AttentionItem(Guid Id, string WorkflowName, string Profile, string When, string Explanation)
+{
+    /// <summary>Screen-reader name.</summary>
+    public string AutomationName => $"{WorkflowName} ({Profile}) needs attention: {Explanation}";
+
+    public static AttentionItem From(ExecutionSnapshot execution)
+    {
+        ArgumentNullException.ThrowIfNull(execution);
+        var when = (execution.StartedAt ?? execution.QueuedAt).ToLocalTime().ToString("ddd d MMM HH:mm", CultureInfo.CurrentCulture);
+        return new AttentionItem(execution.Id, execution.WorkflowName, execution.Profile.DisplayName(), when, execution.Error ?? "The app stopped while this run was active.");
+    }
 }
 
 /// <summary>One line in the Active execution panel.</summary>

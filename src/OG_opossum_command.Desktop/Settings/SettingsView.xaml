@@ -1,0 +1,78 @@
+<UserControl x:Class="OG_opossum_command.Desktop.Settings.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:local="clr-namespace:OG_opossum_command.Desktop.Settings"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=local:SettingsViewModel}"
+             Focusable="False"
+             AutomationProperties.Name="Settings">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+    </UserControl.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
+        <StackPanel Margin="6">
+            <TextBlock Style="{StaticResource OgocHeading}" Text="COMMAND PALETTE HOTKEY" />
+            <DockPanel Margin="0,0,0,4">
+                <Label Content="_Hotkey:" Target="{Binding ElementName=HotkeyBox}" VerticalAlignment="Center" />
+                <Button DockPanel.Dock="Right"
+                        Content="_Apply"
+                        Style="{StaticResource OgocButton}"
+                        Command="{Binding ApplyHotkeyCommand}"
+                        Margin="8,0,0,0"
+                        AutomationProperties.Name="Apply hotkey" />
+                <TextBox x:Name="HotkeyBox"
+                         MinWidth="200"
+                         VerticalContentAlignment="Center"
+                         Text="{Binding HotkeyText, UpdateSourceTrigger=PropertyChanged}"
+                         FocusVisualStyle="{StaticResource OgocFocusVisual}"
+                         AutomationProperties.Name="Command palette hotkey"
+                         AutomationProperties.HelpText="Modifiers plus one key, for example Ctrl+Alt+Space" />
+            </DockPanel>
+            <TextBlock Text="{Binding HotkeyStatus}" TextWrapping="Wrap" Margin="0,0,0,12" AutomationProperties.LiveSetting="Polite" />
+
+            <TextBlock Style="{StaticResource OgocHeading}" Text="NOTIFICATIONS AND SCHEDULES" />
+            <CheckBox Content="_Quiet mode (only failures and runs that need attention show a notification)"
+                      IsChecked="{Binding QuietMode}"
+                      Margin="0,0,0,6"
+                      FocusVisualStyle="{StaticResource OgocFocusVisual}"
+                      AutomationProperties.Name="Quiet mode" />
+            <CheckBox Content="_Pause all schedules (occurrences while paused are skipped, not deferred)"
+                      IsChecked="{Binding SchedulesPaused}"
+                      Margin="0,0,0,12"
+                      FocusVisualStyle="{StaticResource OgocFocusVisual}"
+                      AutomationProperties.Name="Pause all schedules" />
+
+            <TextBlock Style="{StaticResource OgocHeading}" Text="SCHEDULES (edit the workflow file to change one)" />
+            <TextBlock Text="No workflow has a schedule trigger."
+                       Margin="0,0,0,12"
+                       Visibility="{Binding HasNoSchedules, Converter={StaticResource BoolToVis}}" />
+            <ListView ItemsSource="{Binding Schedules}"
+                      Style="{StaticResource OgocList}"
+                      MaxHeight="220"
+                      Margin="0,0,0,12"
+                      SelectionMode="Single"
+                      Visibility="{Binding HasSchedules, Converter={StaticResource BoolToVis}}"
+                      AutomationProperties.Name="Schedules">
+                <ListView.View>
+                    <GridView>
+                        <GridViewColumn Header="Workflow" Width="150" DisplayMemberBinding="{Binding Workflow}" />
+                        <GridViewColumn Header="Profile" Width="80" DisplayMemberBinding="{Binding Profile}" />
+                        <GridViewColumn Header="Schedule" Width="220" DisplayMemberBinding="{Binding Schedule}" />
+                        <GridViewColumn Header="Next" Width="130" DisplayMemberBinding="{Binding NextDue}" />
+                        <GridViewColumn Header="Last outcome" Width="260" DisplayMemberBinding="{Binding LastOutcome}" />
+                    </GridView>
+                </ListView.View>
+            </ListView>
+
+            <TextBlock Style="{StaticResource OgocHeading}" Text="DATA FOLDER" />
+            <TextBox Text="{Binding DataRoot, Mode=OneWay}"
+                     IsReadOnly="True"
+                     BorderThickness="0"
+                     Background="Transparent"
+                     FocusVisualStyle="{StaticResource OgocFocusVisual}"
+                     AutomationProperties.Name="Data folder path" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

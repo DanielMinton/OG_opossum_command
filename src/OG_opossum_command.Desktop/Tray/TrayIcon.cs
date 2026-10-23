@@ -29,6 +29,18 @@ internal sealed class TrayIcon : IDisposable
         open.Click += (_, _) => app.ShowDashboard();
         menu.Items.Add(open);
 
+        var palette = new MenuItem { Header = "_Command palette" };
+        palette.Click += (_, _) => shell.OpenPaletteCommand.Execute(null);
+        menu.Items.Add(palette);
+
+        var settings = new MenuItem { Header = "S_ettings" };
+        settings.Click += (_, _) =>
+        {
+            shell.ShowSettingsCommand.Execute(null);
+            app.ShowDashboard();
+        };
+        menu.Items.Add(settings);
+
         menu.Items.Add(new Separator());
 
         var switchProfile = new MenuItem { Header = "_Switch profile" };
@@ -60,6 +72,9 @@ internal sealed class TrayIcon : IDisposable
         _icon.TrayLeftMouseUp += (_, _) => app.ShowDashboard();
         _icon.ForceCreate();
     }
+
+    /// <summary>The underlying icon, for balloon notifications; <c>null</c> once disposed.</summary>
+    public TaskbarIcon? Icon => _disposed ? null : _icon;
 
     private void SyncProfileChecks()
     {

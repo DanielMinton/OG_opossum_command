@@ -1,18 +1,20 @@
 namespace OG_opossum_command.Core.Profiles;
 
 /// <summary>
-/// A context (Work or Personal) with its own workflow folder, history scope, and action allowlist.
-/// The engine refuses any step whose action is not in <see cref="AllowedActionIds"/> (ADR-012).
+/// A context (Work or Personal) with its own workflow folder, trusted scripts folder, history scope, and action
+/// allowlist. The engine refuses any step whose action is not in <see cref="AllowedActionIds"/> (ADR-012).
 /// </summary>
 public sealed class Profile
 {
-    public Profile(ProfileId id, string workflowsDirectory, IEnumerable<string> allowedActionIds)
+    public Profile(ProfileId id, string workflowsDirectory, string scriptsDirectory, IEnumerable<string> allowedActionIds)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workflowsDirectory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(scriptsDirectory);
         ArgumentNullException.ThrowIfNull(allowedActionIds);
 
         Id = id;
         WorkflowsDirectory = workflowsDirectory;
+        ScriptsDirectory = scriptsDirectory;
         AllowedActionIds = new HashSet<string>(allowedActionIds, StringComparer.Ordinal);
     }
 
@@ -24,6 +26,9 @@ public sealed class Profile
 
     /// <summary>Folder holding this profile's workflow JSON files.</summary>
     public string WorkflowsDirectory { get; }
+
+    /// <summary>Folder holding this profile's trusted scripts; <c>windows.script.run</c> never reads anywhere else (ADR-031).</summary>
+    public string ScriptsDirectory { get; }
 
     /// <summary>Stable action IDs this profile may run. Anything else is refused by the engine.</summary>
     public IReadOnlySet<string> AllowedActionIds { get; }

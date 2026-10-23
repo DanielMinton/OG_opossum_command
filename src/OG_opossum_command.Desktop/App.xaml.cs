@@ -2,9 +2,12 @@
 using System.Windows;
 using System.Windows.Threading;
 using OG_opossum_command.Core.Actions.Launchers;
+using OG_opossum_command.Core.History;
 using OG_opossum_command.Core.Hosting;
+using OG_opossum_command.Core.Notifications;
 using OG_opossum_command.Core.Paths;
 using OG_opossum_command.Core.Seeding;
+using OG_opossum_command.Desktop.CommandPalette;
 using OG_opossum_command.Desktop.Shell;
 using OG_opossum_command.Desktop.Tray;
 
@@ -15,10 +18,13 @@ namespace OG_opossum_command.Desktop;
 /// menu ends the process. Constructed by <see cref="Program"/> for interactive runs and by the smoke runner
 /// for <c>--smoke-ui</c>.
 /// </summary>
-[System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable", Justification = "WPF Application is not IDisposable; the tray icon is disposed in OnExit and in Quit.")]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable", Justification = "WPF Application is not IDisposable; the tray icon, hotkey, and notifications are disposed in OnExit and in Quit.")]
 public partial class App : Application
 {
     private TrayIcon? _tray;
+    private GlobalHotkey? _hotkey;
+    private NotificationService? _notifications;
+    private CommandPaletteWindow? _palette;
     private bool _quitting;
 
     /// <summary>Set by the smoke runner: build everything off-screen, create and dispose the tray icon, then exit.</summary>
@@ -53,6 +59,42 @@ public partial class App : Application
         MainWindow.Activate();
     }
 
+    /// <summary>Opens the command palette (hotkey, tray menu, Settings), or brings the open one forward.</summary>
+    internal void ShowCommandPalette()
+    {
+        if (Host is null || _quitting)
+        {
+            return;
+        }
+
+        if (_palette is not null)
+        {
+            _palette.Activate();
+            return;
+        }
+
+        _palette = new CommandPaletteWindow(new CommandPaletteViewModel(Host), message => Shell?.Dashboard.ShowMessage(message));
+        _palette.Closed += (_, _) => _palette = null;
+        _palette.Show();
+        _palette.Activate();
+    }
+
+    /// <summary>Registers <paramref name="gesture"/> as the palette hotkey (Settings → Apply). Returns a one-line result.</summary>
+    internal string ApplyHotkey(HotkeyGesture gesture)
+    {
+        ArgumentNullException.ThrowIfNull(gesture);
+        if (SmokeUi || MainWindow is null)
+        {
+            return $"Hotkey {gesture} saved (not registered in smoke mode).";
+        }
+
+        _hotkey ??= new GlobalHotkey(MainWindow, ShowCommandPalette);
+        var ok = _hotkey.Register(gesture);
+        var status = ok ? $"Hotkey {gesture} is active." : _hotkey.FailureReason ?? $"Hotkey {gesture} could not be registered.";
+        Shell?.ReportHotkey(ok ? null : _hotkey.FailureReason, status);
+        return status;
+    }
+
     /// <summary>Tray Quit: cancel active runs, give them a moment, then exit the process.</summary>
     internal async void Quit()
     {
@@ -62,8 +104,11 @@ public partial class App : Application
         }
 
         _quitting = true;
+        _hotkey?.Dispose();
+        _hotkey = null;
         _tray?.Dispose();
         _tray = null;
+        _palette?.Close();
         MainWindow?.Hide();
         if (Host is not null)
         {
@@ -95,7 +140,11 @@ public partial class App : Application
             DispatcherUnhandledException += OnDispatcherUnhandledException;
         }
 
-        Shell = new ShellViewModel(Host, Dispatcher, this);
+        // Balloons go through the injectable sink; the smoke run records instead of showing (rule 7, ADR-037).
+        INotificationSink sink = SmokeUi ? new RecordingNotificationSink() : new TrayNotificationSink(Dispatcher, () => _tray?.Icon);
+        _notifications = new NotificationService(Host.History, sink, Host.Engine, Host.Scheduler);
+
+        Shell = new ShellViewModel(Host, Dispatcher, this, _notifications);
         var window = new MainWindow { DataContext = Shell };
         MainWindow = window;
         window.Closing += (_, args) =>
@@ -124,13 +173,30 @@ public partial class App : Application
         {
             _ = CompleteSmokeUiAsync(window);
         }
+        else
+        {
+            RegisterSavedHotkey();
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _hotkey?.Dispose();
         _tray?.Dispose();
+        _notifications?.Dispose();
         Host?.Dispose();
         base.OnExit(e);
+    }
+
+    private void RegisterSavedHotkey()
+    {
+        var saved = Host!.History.GetSetting(SettingKeys.Hotkey);
+        if (!HotkeyGesture.TryParse(saved, out var gesture, out _))
+        {
+            gesture = HotkeyGesture.Default;
+        }
+
+        ApplyHotkey(gesture);
     }
 
     private async Task CompleteSmokeUiAsync(MainWindow window)
@@ -139,9 +205,29 @@ public partial class App : Application
         {
             await window.LoadedTask;
             await Shell!.Dashboard.FirstBindCompleted;
+
+            // Instantiate the other surfaces off-screen so XAML resource errors fail the gate, not the user's first keypress.
+            Shell.ShowSettingsCommand.Execute(null);
+            await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Loaded);
+            var palette = new CommandPaletteWindow(new CommandPaletteViewModel(Host!), null)
+            {
+                SuppressCloseOnDeactivate = true,
+                WindowStartupLocation = WindowStartupLocation.Manual,
+                Left = -32000,
+                Top = -32000,
+                ShowActivated = false,
+                Topmost = false,
+            };
+            palette.Show();
+            await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Loaded);
+            var paletteItems = palette.Results.Items.Count;
+            palette.Close();
+            Shell.ShowDashboardCommand.Execute(null);
+
             _tray?.Dispose();
             _tray = null;
             Console.WriteLine($"smoke-ui: window loaded, dashboard bound ({Shell.Dashboard.Tiles.Count} tiles), tray icon created and disposed");
+            Console.WriteLine($"smoke-ui: settings view bound ({Shell.Settings.Schedules.Count} schedule(s)), command palette shown off-screen with {paletteItems} item(s) and closed, hotkey not registered");
             _quitting = true;
             Shutdown(0);
         }

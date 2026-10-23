@@ -35,11 +35,21 @@ internal sealed class TempDataRoot : IDisposable
 
     /// <summary>A profile rooted here that may run every registered action.</summary>
     public Profile Profile(ProfileId id, ActionRegistry registry) =>
-        new(id, Paths.GetProfileWorkflowsDirectory(id), registry.Ids);
+        new(id, Paths.GetProfileWorkflowsDirectory(id), Paths.GetProfileScriptsDirectory(id), registry.Ids);
 
     /// <summary>A profile rooted here with an explicit allowlist.</summary>
     public Profile Profile(ProfileId id, params string[] allowedActions) =>
-        new(id, Paths.GetProfileWorkflowsDirectory(id), allowedActions);
+        new(id, Paths.GetProfileWorkflowsDirectory(id), Paths.GetProfileScriptsDirectory(id), allowedActions);
+
+    /// <summary>Writes a trusted script into the profile's scripts folder and returns its path.</summary>
+    public string WriteScript(ProfileId id, string fileName, string contents)
+    {
+        var folder = Paths.GetProfileScriptsDirectory(id);
+        Directory.CreateDirectory(folder);
+        var path = Path.Combine(folder, fileName);
+        File.WriteAllText(path, contents);
+        return path;
+    }
 
     public void Dispose()
     {

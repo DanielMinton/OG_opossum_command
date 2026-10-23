@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 2,
+  "id": "hello-script",
+  "name": "Hello Script",
+  "description": "EXAMPLE - edit me. Runs the trusted hello.cmd from this profile's scripts folder and keeps its output in History. Shows how windows.script.run works.",
+  "profileId": "personal",
+  "trigger": { "type": "manual" },
+  "aliases": ["hello", "script demo"],
+  "steps": [
+    {
+      "id": "hello",
+      "name": "Run hello.cmd",
+      "action": "windows.script.run",
+      "inputs": {
+        "interpreter": "cmd",
+        "script": "hello.cmd",
+        "arguments": ["first", "second"]
+      },
+      "timeoutSeconds": 30
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+<Window x:Class="OG_opossum_command.Desktop.CommandPalette.CommandPaletteWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:OG_opossum_command.Desktop.CommandPalette"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=local:CommandPaletteViewModel}"
+        Title="Command palette"
+        Width="520" Height="360"
+        MinWidth="360" MinHeight="200"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="ToolWindow"
+        ResizeMode="NoResize"
+        Topmost="True"
+        ShowInTaskbar="False"
+        Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
+        Foreground="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}"
+        AutomationProperties.Name="Command palette">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBox x:Name="QueryBox"
+                 Grid.Row="0"
+                 FontSize="16"
+                 Padding="6"
+                 Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}"
+                 FocusVisualStyle="{StaticResource OgocFocusVisual}"
+                 Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
+                 Foreground="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}"
+                 AutomationProperties.Name="Search workflows by name or alias" />
+
+        <ListBox x:Name="Results"
+                 Grid.Row="1"
+                 Margin="0,8,0,0"
+                 ItemsSource="{Binding Items}"
+                 SelectedItem="{Binding Selected, Mode=TwoWay}"
+                 FocusVisualStyle="{StaticResource OgocFocusVisual}"
+                 Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
+                 Foreground="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 AutomationProperties.Name="Matching workflows">
+            <ListBox.ItemTemplate>
+                <DataTemplate DataType="{x:Type local:PaletteItem}">
+                    <StackPanel Margin="4,2" AutomationProperties.Name="{Binding AutomationName}">
+                        <TextBlock Text="{Binding Label}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding Aliases}" FontSize="12" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                    </StackPanel>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <TextBlock Grid.Row="2"
+                   Margin="0,8,0,0"
+                   Text="{Binding Message}"
+                   TextWrapping="Wrap"
+                   AutomationProperties.LiveSetting="Polite" />
+    </Grid>
+</Window>

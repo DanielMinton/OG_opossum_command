@@ -6,8 +6,8 @@ using OG_opossum_command.Core.Workflows;
 namespace OG_opossum_command.Core.Engine;
 
 /// <summary>
-/// Runs workflows: execution IDs, the spec §06 state machine, dependsOn ordering, bounded parallelism,
-/// timeouts, cancellation that reaches launched process trees, the focus-existing duplicate policy, and
+/// Runs workflows: execution IDs, the spec §06 state machine, dependsOn ordering, bounded parallelism, resource
+/// locks, timeouts, cancellation that reaches launched process trees, the focus-existing duplicate policy, and
 /// durable, redacted history. Everything runs on the thread pool; <see cref="ExecutionChanged"/> fires on
 /// worker threads with immutable snapshots.
 /// </summary>
@@ -43,6 +43,9 @@ public sealed class WorkflowEngine : IDisposable
 
     public EngineOptions Options { get; }
 
+    /// <summary>Engine-wide resource locks shared by every run (ADR-033).</summary>
+    public ResourceLocks Locks { get; } = new();
+
     /// <summary>Runs that are Queued, Running, or Cancelling, oldest first.</summary>
     public IReadOnlyList<ExecutionSnapshot> ActiveExecutions
     {
@@ -69,11 +72,12 @@ public sealed class WorkflowEngine : IDisposable
     /// existing run when one for the same workflow is still active (focus-existing).
     /// </summary>
     /// <exception cref="ActionNotAllowedException">A step's action is not allowed in <paramref name="profile"/>.</exception>
-    public StartResult Start(WorkflowDefinition workflow, Profile profile)
+    public StartResult Start(WorkflowDefinition workflow, Profile profile, StartOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(workflow);
         ArgumentNullException.ThrowIfNull(profile);
         ObjectDisposedException.ThrowIf(_disposed, this);
+        options ??= StartOptions.Manual;
 
         if (workflow.ProfileId != profile.Id)
         {
@@ -102,13 +106,18 @@ public sealed class WorkflowEngine : IDisposable
                 return new StartResult(existing.Snapshot(), WasAlreadyRunning: true);
             }
 
-            run = new Run(Guid.NewGuid(), workflow, profile, _time.GetUtcNow());
+            run = new Run(Guid.NewGuid(), workflow, profile, options, _time.GetUtcNow());
             _runs[run.Id] = run;
         }
 
         var snapshot = run.Snapshot();
         _history.SaveExecution(snapshot);
-        AppendEvent(run, null, EventSeverity.Info, "execution.queued", $"Queued {workflow.Name}", null);
+        AppendEvent(run, null, EventSeverity.Info, "execution.queued", options.TriggerSource switch
+        {
+            TriggerSources.Schedule => $"Queued {workflow.Name} (scheduled for {options.ScheduledFor:u})",
+            TriggerSources.Recovery => $"Queued {workflow.Name} (resuming run {options.ResumedFrom}; {options.AlreadyCompletedSteps?.Count ?? 0} step(s) already done)",
+            _ => $"Queued {workflow.Name}",
+        }, null);
         ExecutionChanged?.Invoke(this, snapshot);
 
         _ = Task.Run(() => RunAsync(run));
@@ -221,10 +230,20 @@ public sealed class WorkflowEngine : IDisposable
             await _workflowSlots.WaitAsync(token).ConfigureAwait(false);
             slotAcquired = true;
 
+            var now = _time.GetUtcNow();
             run.Update(state =>
             {
                 state.Status = ExecutionStatus.Running;
-                state.StartedAt = _time.GetUtcNow();
+                state.StartedAt = now;
+                foreach (var step in state.Steps.Values.Where(s => run.Options.AlreadyCompletedSteps?.Contains(s.Definition.Id) == true))
+                {
+                    // Its side effect happened in the run being resumed; never repeat it (spec §13).
+                    step.Status = StepStatus.Completed;
+                    step.StartedAt = now;
+                    step.FinishedAt = now;
+                    step.Message = "Completed in the interrupted run; not repeated";
+                }
+
                 return true;
             });
             Publish(run);
@@ -259,7 +278,7 @@ public sealed class WorkflowEngine : IDisposable
     private async Task RunStepsAsync(Run run)
     {
         var token = run.Cancellation.Token;
-        var pending = run.Workflow.Steps.Select(s => s.Id).ToList();
+        var pending = run.Workflow.Steps.Where(s => run.StepStatusOf(s.Id) == StepStatus.Pending).Select(s => s.Id).ToList();
         var running = new Dictionary<string, Task>(StringComparer.Ordinal);
         var stopRequested = false;
 
@@ -349,7 +368,7 @@ public sealed class WorkflowEngine : IDisposable
         var timeout = step.Timeout ?? action.DefaultTimeout;
         var startedAt = _time.GetUtcNow();
 
-        run.SetStep(step.Id, StepStatus.Running, null, null, null, null, startedAt);
+        run.SetStep(step.Id, StepStatus.Running, null, null, step.Locks.Count > 0 ? $"Waiting for {string.Join(", ", step.Locks)}" : null, null, startedAt);
         _history.SaveExecution(run.Snapshot());
         AppendEvent(run, step.Id, EventSeverity.Info, "step.started", $"{step.Name} ({step.ActionId})", null);
         Publish(run);
@@ -364,6 +383,15 @@ public sealed class WorkflowEngine : IDisposable
         var severity = EventSeverity.Info;
         try
         {
+            // Locks are taken under the step's own token, so Cancel while waiting releases nothing it did not take (ADR-033).
+            using var held = await Locks.AcquireAsync(step.Locks, stepCancellation.Token).ConfigureAwait(false);
+            if (step.Locks.Count > 0)
+            {
+                run.SetStep(step.Id, StepStatus.Running, null, null, null, null);
+                AppendEvent(run, step.Id, EventSeverity.Info, "step.locked", $"Holding {string.Join(", ", step.Locks)}", null);
+                Publish(run);
+            }
+
             var context = new ActionContext(run.Id, run.Workflow.Id, step.Id, run.Profile);
             var result = await action.ExecuteAsync(step.Inputs, context, stepCancellation.Token).ConfigureAwait(false);
             status = result.Succeeded ? StepStatus.Completed : StepStatus.Failed;
@@ -441,6 +469,10 @@ public sealed class WorkflowEngine : IDisposable
                 snapshot.Error ?? $"{snapshot.Status}: {snapshot.CompletedStepCount} of {snapshot.Steps.Count} steps completed",
                 snapshot.StartedAt is null ? null : (long)(now - snapshot.StartedAt.Value).TotalMilliseconds);
         }
+        catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException or Microsoft.Data.Sqlite.SqliteException)
+        {
+            // The store is gone (shutdown or a simulated crash): the next start reconciles this run as Interrupted (spec §13).
+        }
         finally
         {
             run.Completion.TrySetResult(snapshot);
@@ -459,11 +491,12 @@ public sealed class WorkflowEngine : IDisposable
         private readonly Lock _lock = new();
         private readonly State _state;
 
-        public Run(Guid id, WorkflowDefinition workflow, Profile profile, DateTimeOffset queuedAt)
+        public Run(Guid id, WorkflowDefinition workflow, Profile profile, StartOptions options, DateTimeOffset queuedAt)
         {
             Id = id;
             Workflow = workflow;
             Profile = profile;
+            Options = options;
             _state = new State(queuedAt);
             var ordinal = 0;
             foreach (var step in workflow.Steps)
@@ -477,6 +510,8 @@ public sealed class WorkflowEngine : IDisposable
         public WorkflowDefinition Workflow { get; }
 
         public Profile Profile { get; }
+
+        public StartOptions Options { get; }
 
         public CancellationTokenSource Cancellation { get; } = new();
 
@@ -520,7 +555,21 @@ public sealed class WorkflowEngine : IDisposable
                     .OrderBy(s => s.Ordinal)
                     .Select(s => new StepSnapshot(s.Definition.Id, s.Definition.Name, s.Definition.ActionId, s.Ordinal, s.Status, s.StartedAt, s.FinishedAt, s.ErrorCode, s.Message, s.Output))
                     .ToList();
-                return new ExecutionSnapshot(Id, Profile.Id, Workflow.Id, Workflow.Name, _state.Status, _state.QueuedAt, _state.StartedAt, _state.FinishedAt, _state.Error, steps);
+                return new ExecutionSnapshot(
+                    Id,
+                    Profile.Id,
+                    Workflow.Id,
+                    Workflow.Name,
+                    _state.Status,
+                    _state.QueuedAt,
+                    _state.StartedAt,
+                    _state.FinishedAt,
+                    _state.Error,
+                    steps,
+                    Workflow.ContentHash,
+                    Options.TriggerSource,
+                    Options.ScheduledFor,
+                    Options.ResumedFrom);
             }
         }
 

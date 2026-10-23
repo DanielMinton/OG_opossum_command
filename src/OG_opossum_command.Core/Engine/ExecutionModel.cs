@@ -12,10 +12,10 @@ public enum ExecutionStatus
     Cancelling,
     Cancelled,
 
-    /// <summary>The app stopped while the run was active. Set during startup reconciliation.</summary>
+    /// <summary>The app stopped while the run was active. Set during startup reconciliation; terminal once reviewed.</summary>
     Interrupted,
 
-    /// <summary>Recovery could not tell whether a side effect happened; the operator must decide (Phase 4).</summary>
+    /// <summary>Recovery could not tell whether a side effect happened; the operator decides (Resume / Dismiss).</summary>
     NeedsAttention,
 }
 
@@ -51,6 +51,11 @@ public sealed record StepSnapshot(
 }
 
 /// <summary>Immutable view of one run, safe to hand to any thread.</summary>
+/// <param name="WorkflowHash">Content hash of the definition this run used (so recovery can tell whether the file changed).</param>
+/// <param name="TriggerSource">One of <see cref="TriggerSources"/>.</param>
+/// <param name="ScheduledFor">The schedule occurrence that started this run, when <paramref name="TriggerSource"/> is <c>schedule</c>.</param>
+/// <param name="ResumedFrom">The interrupted run this one continues, when <paramref name="TriggerSource"/> is <c>recovery</c>.</param>
+/// <param name="Recovery">One of <see cref="RecoveryStates"/>, or <c>null</c> when recovery never touched this run.</param>
 public sealed record ExecutionSnapshot(
     Guid Id,
     ProfileId Profile,
@@ -61,7 +66,12 @@ public sealed record ExecutionSnapshot(
     DateTimeOffset? StartedAt,
     DateTimeOffset? FinishedAt,
     string? Error,
-    IReadOnlyList<StepSnapshot> Steps)
+    IReadOnlyList<StepSnapshot> Steps,
+    string WorkflowHash = "",
+    string TriggerSource = TriggerSources.Manual,
+    DateTimeOffset? ScheduledFor = null,
+    Guid? ResumedFrom = null,
+    string? Recovery = null)
 {
     /// <summary>Queued, Running, or Cancelling.</summary>
     public bool IsActive => Status is ExecutionStatus.Queued or ExecutionStatus.Running or ExecutionStatus.Cancelling;
@@ -71,6 +81,48 @@ public sealed record ExecutionSnapshot(
 
     /// <summary>Steps that reached any terminal state.</summary>
     public int SettledStepCount => Steps.Count(s => s.IsTerminal);
+}
+
+/// <summary>Values of <see cref="ExecutionSnapshot.TriggerSource"/>.</summary>
+public static class TriggerSources
+{
+    public const string Manual = "manual";
+    public const string Schedule = "schedule";
+    public const string Recovery = "recovery";
+}
+
+/// <summary>Values of <see cref="ExecutionSnapshot.Recovery"/> (spec §13 recovery algorithm, ADR-035).</summary>
+public static class RecoveryStates
+{
+    /// <summary>Marked Interrupted at startup; not yet classified.</summary>
+    public const string Pending = "pending";
+
+    /// <summary>Every unfinished step was safe to repeat; a new run was started automatically.</summary>
+    public const string AutoResumed = "auto-resumed";
+
+    /// <summary>A side effect may already have happened; waiting for the operator.</summary>
+    public const string NeedsAttention = "needs-attention";
+
+    /// <summary>The operator chose Resume; a new run was started.</summary>
+    public const string Resumed = "resumed";
+
+    /// <summary>The operator chose Dismiss; nothing was re-run.</summary>
+    public const string Dismissed = "dismissed";
+}
+
+/// <summary>How a run is being started.</summary>
+/// <param name="TriggerSource">One of <see cref="TriggerSources"/>.</param>
+/// <param name="ScheduledFor">The schedule occurrence being honoured.</param>
+/// <param name="ResumedFrom">The interrupted run this one continues.</param>
+/// <param name="AlreadyCompletedSteps">Step IDs to mark Completed at once instead of running them again (their side effects happened in <paramref name="ResumedFrom"/>).</param>
+public sealed record StartOptions(
+    string TriggerSource = TriggerSources.Manual,
+    DateTimeOffset? ScheduledFor = null,
+    Guid? ResumedFrom = null,
+    IReadOnlySet<string>? AlreadyCompletedSteps = null)
+{
+    /// <summary>A plain manual start.</summary>
+    public static StartOptions Manual { get; } = new();
 }
 
 /// <summary>One ordered, redacted diagnostic event (spec §13 logging contract).</summary>

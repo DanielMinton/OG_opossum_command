@@ -31,6 +31,18 @@
 
   <ItemGroup>
     <None Include="..\..\examples\workflows\**\*.json" Link="examples\workflows\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\examples\scripts\**\*" Link="examples\scripts\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      The single-instance test starts the real Desktop exe in smoke-test mode (ADR-036). A net10.0 test project
+      cannot reference a net10.0-windows project, so the exe path is baked in at build time and the ProjectReference
+      (no assembly reference) only guarantees the exe is built before the tests run.
+    -->
+    <AssemblyMetadata Include="DesktopExePath" Value="$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\src\OG_opossum_command.Desktop\bin\$(Configuration)\net10.0-windows\OG_opossum_command.exe'))" />
+    <ProjectReference Include="..\..\src\OG_opossum_command.Desktop\OG_opossum_command.Desktop.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" Private="false" />
   </ItemGroup>
 
 </Project>

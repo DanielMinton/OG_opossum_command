@@ -4,15 +4,27 @@ using OG_opossum_command.Core.Engine;
 using OG_opossum_command.Core.History;
 using OG_opossum_command.Core.Paths;
 using OG_opossum_command.Core.Profiles;
+using OG_opossum_command.Core.Recovery;
+using OG_opossum_command.Core.Scheduling;
 using OG_opossum_command.Core.Seeding;
 using OG_opossum_command.Core.Workflows;
 
 namespace OG_opossum_command.Core.Hosting;
 
+/// <summary>How to compose Core.</summary>
+/// <param name="Engine">Engine limits.</param>
+/// <param name="StartSchedulerLoop">Run the scheduler's background loop. Tests turn this off and call <see cref="Scheduler.Tick"/> themselves.</param>
+/// <param name="ReviewInterruptedRuns">Run the recovery review at startup. Always on in the app; tests may disable it to inspect raw Interrupted rows.</param>
+public sealed record CoreHostOptions(EngineOptions? Engine = null, bool StartSchedulerLoop = true, bool ReviewInterruptedRuns = true);
+
+/// <summary>A workflow found by <see cref="CoreHost.Search"/>, with the profile it runs under.</summary>
+public sealed record WorkflowMatch(WorkflowDefinition Workflow, Profile Profile, int Rank);
+
 /// <summary>
 /// Composes Core for one data root: opens and migrates the database, reconciles interrupted runs, loads
-/// profiles, seeds examples on first run, loads and validates workflows, and builds the engine.
-/// The desktop app, the smoke modes, and tests all start here, differing only in the launchers they pass.
+/// profiles, seeds examples on first run, loads and validates workflows, builds the engine, reviews interrupted
+/// runs (spec §13), and starts the scheduler (spec §08). The desktop app, the smoke modes, and tests all start
+/// here, differing only in the launchers they pass.
 /// </summary>
 public sealed class CoreHost : IDisposable
 {
@@ -21,7 +33,7 @@ public sealed class CoreHost : IDisposable
     private readonly TimeProvider _time;
     private bool _disposed;
 
-    private CoreHost(IAppPaths paths, ActionRegistry actions, SqliteHistoryStore history, ProfileCatalog profiles, WorkflowEngine engine, TimeProvider time, IReadOnlyList<ProfileSeedingResult> seeding, int interrupted)
+    private CoreHost(IAppPaths paths, ActionRegistry actions, SqliteHistoryStore history, ProfileCatalog profiles, WorkflowEngine engine, TimeProvider time, IReadOnlyList<ProfileSeedingResult> seeding, IReadOnlyList<Guid> interrupted)
     {
         Paths = paths;
         Actions = actions;
@@ -29,8 +41,9 @@ public sealed class CoreHost : IDisposable
         Profiles = profiles;
         Engine = engine;
         Seeding = seeding;
-        InterruptedOnStartup = interrupted;
+        InterruptedOnStartup = interrupted.Count;
         _time = time;
+        Scheduler = new Scheduler(history, engine, () => Workflows, time);
     }
 
     public IAppPaths Paths { get; }
@@ -43,11 +56,16 @@ public sealed class CoreHost : IDisposable
 
     public WorkflowEngine Engine { get; }
 
+    public Scheduler Scheduler { get; }
+
     /// <summary>What first-run seeding did, per profile.</summary>
     public IReadOnlyList<ProfileSeedingResult> Seeding { get; }
 
     /// <summary>Runs found active in the database at startup and marked Interrupted.</summary>
     public int InterruptedOnStartup { get; }
+
+    /// <summary>What the recovery review decided for each interrupted run at startup.</summary>
+    public IReadOnlyList<RecoveryDecision> RecoveryDecisions { get; private set; } = [];
 
     /// <summary>Loaded workflows and load errors, per profile.</summary>
     public IReadOnlyList<ProfileWorkflows> Workflows
@@ -61,27 +79,33 @@ public sealed class CoreHost : IDisposable
         }
     }
 
+    /// <summary>Runs waiting for the operator (Resume / Dismiss), newest first.</summary>
+    public IReadOnlyList<ExecutionSnapshot> NeedsAttention => History.GetExecutionsByStatus(ExecutionStatus.NeedsAttention, 50);
+
     /// <summary>Opens Core for <paramref name="paths"/>. Creates the data root if needed.</summary>
     /// <param name="paths">Where everything lives (rule 6).</param>
     /// <param name="launchers">Real launchers for the app; recording fakes for tests and smoke modes.</param>
     /// <param name="examplesRoot">Folder holding <c>work\</c> and <c>personal\</c> example workflows; may not exist.</param>
-    /// <param name="options">Engine limits.</param>
+    /// <param name="options">Composition options.</param>
     /// <param name="time">Clock; tests may inject one.</param>
-    public static CoreHost Open(IAppPaths paths, LauncherSet launchers, string examplesRoot, EngineOptions? options = null, TimeProvider? time = null)
+    public static CoreHost Open(IAppPaths paths, LauncherSet launchers, string examplesRoot, CoreHostOptions? options = null, TimeProvider? time = null)
     {
         ArgumentNullException.ThrowIfNull(paths);
         ArgumentNullException.ThrowIfNull(launchers);
         ArgumentException.ThrowIfNullOrWhiteSpace(examplesRoot);
 
+        options ??= new CoreHostOptions();
         var clock = time ?? TimeProvider.System;
         Directory.CreateDirectory(paths.DataRoot);
         Directory.CreateDirectory(paths.ProfilesDirectory);
         Directory.CreateDirectory(paths.LogsDirectory);
 
         var history = SqliteHistoryStore.Open(paths.DatabasePath);
+        CoreHost? host = null;
         try
         {
-            var interrupted = history.MarkInterrupted(clock.GetUtcNow());
+            var now = clock.GetUtcNow();
+            var interrupted = history.MarkInterrupted(now);
             var actions = ActionRegistry.CreateDefault(launchers);
             var profiles = ProfileCatalog.Load(paths, actions);
             foreach (var profile in profiles.Profiles)
@@ -90,18 +114,37 @@ public sealed class CoreHost : IDisposable
             }
 
             var seeding = FirstRunSeeder.Seed(profiles.Profiles, examplesRoot);
-            var engine = new WorkflowEngine(actions, history, options, clock);
-            var host = new CoreHost(paths, actions, history, profiles, engine, clock, seeding, interrupted);
+            var engine = new WorkflowEngine(actions, history, options.Engine, clock);
+            host = new CoreHost(paths, actions, history, profiles, engine, clock, seeding, interrupted);
             foreach (var profile in profiles.Profiles)
             {
-                host.ReloadWorkflows(profile.Id);
+                host.ReloadWorkflows(profile.Id, reconcileSchedules: false);
+            }
+
+            if (options.ReviewInterruptedRuns)
+            {
+                host.RecoveryDecisions = RecoveryReviewer.Review(interrupted, history, engine, actions, host.Workflows, now);
+            }
+
+            host.Scheduler.Reconcile(now);
+            if (options.StartSchedulerLoop)
+            {
+                host.Scheduler.Start();
             }
 
             return host;
         }
         catch
         {
-            history.Dispose();
+            if (host is not null)
+            {
+                host.Dispose();
+            }
+            else
+            {
+                history.Dispose();
+            }
+
             throw;
         }
     }
@@ -115,8 +158,63 @@ public sealed class CoreHost : IDisposable
         }
     }
 
-    /// <summary>Re-reads one profile's workflow folder from disk and records the definitions in history.</summary>
-    public ProfileWorkflows ReloadWorkflows(ProfileId profileId)
+    /// <summary>Re-reads one profile's workflow folder from disk, records the definitions in history, and re-registers schedules.</summary>
+    public ProfileWorkflows ReloadWorkflows(ProfileId profileId) => ReloadWorkflows(profileId, reconcileSchedules: true);
+
+    /// <summary>Starts a workflow of a profile by ID; the engine enforces the allowlist.</summary>
+    /// <exception cref="KeyNotFoundException">No loaded workflow has that ID in that profile.</exception>
+    public StartResult Run(ProfileId profileId, string workflowId, StartOptions? options = null)
+    {
+        var loaded = GetWorkflows(profileId);
+        var workflow = loaded.Workflows.FirstOrDefault(w => w.Id == workflowId)
+            ?? throw new KeyNotFoundException($"No workflow '{workflowId}' is loaded for the {profileId.DisplayName()} profile.");
+        return Engine.Start(workflow, loaded.Profile, options);
+    }
+
+    /// <summary>Operator Resume for a run that needs attention (ADR-035).</summary>
+    public StartResult Resume(Guid executionId) => RecoveryReviewer.Resume(executionId, History, Engine, Workflows, _time.GetUtcNow());
+
+    /// <summary>Operator Dismiss for a run that needs attention (ADR-035).</summary>
+    public void Dismiss(Guid executionId) => RecoveryReviewer.Dismiss(executionId, History, _time.GetUtcNow());
+
+    /// <summary>
+    /// Command-palette search across both profiles: matches id, name, and aliases, case-insensitively. Ranked:
+    /// alias or name equal (0), name or alias starts with (1), id starts with (2), contains (3). Empty query lists everything.
+    /// </summary>
+    public IReadOnlyList<WorkflowMatch> Search(string? query, int limit = 20)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
+        var needle = (query ?? string.Empty).Trim();
+        var matches = new List<WorkflowMatch>();
+        foreach (var loaded in Workflows)
+        {
+            foreach (var workflow in loaded.Workflows)
+            {
+                var rank = Rank(workflow, needle);
+                if (rank is not null)
+                {
+                    matches.Add(new WorkflowMatch(workflow, loaded.Profile, rank.Value));
+                }
+            }
+        }
+
+        return matches.OrderBy(m => m.Rank).ThenBy(m => m.Workflow.Name, StringComparer.CurrentCultureIgnoreCase).Take(limit).ToList();
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        Scheduler.Dispose();
+        Engine.Dispose();
+        History.Dispose();
+    }
+
+    private ProfileWorkflows ReloadWorkflows(ProfileId profileId, bool reconcileSchedules)
     {
         var profile = Profiles.Get(profileId);
         var loaded = new WorkflowLoader(Actions).LoadProfile(profile);
@@ -131,28 +229,42 @@ public sealed class CoreHost : IDisposable
             _workflows[profileId] = loaded;
         }
 
+        if (reconcileSchedules)
+        {
+            Scheduler.Reconcile(now);
+        }
+
         return loaded;
     }
 
-    /// <summary>Starts a workflow of a profile by ID; the engine enforces the allowlist.</summary>
-    /// <exception cref="KeyNotFoundException">No loaded workflow has that ID in that profile.</exception>
-    public StartResult Run(ProfileId profileId, string workflowId)
+    private static int? Rank(WorkflowDefinition workflow, string needle)
     {
-        var loaded = GetWorkflows(profileId);
-        var workflow = loaded.Workflows.FirstOrDefault(w => w.Id == workflowId)
-            ?? throw new KeyNotFoundException($"No workflow '{workflowId}' is loaded for the {profileId.DisplayName()} profile.");
-        return Engine.Start(workflow, loaded.Profile);
-    }
-
-    public void Dispose()
-    {
-        if (_disposed)
+        if (needle.Length == 0)
         {
-            return;
+            return 3;
         }
 
-        _disposed = true;
-        Engine.Dispose();
-        History.Dispose();
+        var names = workflow.Aliases.Append(workflow.Name).ToList();
+        if (names.Any(n => string.Equals(n, needle, StringComparison.OrdinalIgnoreCase)))
+        {
+            return 0;
+        }
+
+        if (names.Any(n => n.StartsWith(needle, StringComparison.OrdinalIgnoreCase)))
+        {
+            return 1;
+        }
+
+        if (workflow.Id.StartsWith(needle, StringComparison.OrdinalIgnoreCase))
+        {
+            return 2;
+        }
+
+        if (names.Any(n => n.Contains(needle, StringComparison.OrdinalIgnoreCase)) || workflow.Id.Contains(needle, StringComparison.OrdinalIgnoreCase))
+        {
+            return 3;
+        }
+
+        return null;
     }
 }

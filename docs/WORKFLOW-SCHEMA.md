@@ -1,9 +1,10 @@
-# Workflow schema v1
+# Workflow schema (v1 and v2)
 
-> Status: **current** (Phase 3). The loader and validator live in
+> Status: **current** (Phase 4). The loader and validator live in
 > `src/OG_opossum_command.Core/Workflows` (`WorkflowLoader`, `JsonObjectReader`); the actions that
-> define each `inputs` shape live in `src/OG_opossum_command.Core/Actions/Windows`. This document
-> describes what that code accepts. If they ever disagree, the code is the bug or this file is.
+> define each `inputs` shape live in `src/OG_opossum_command.Core/Actions/Windows`; schedules in
+> `src/OG_opossum_command.Core/Scheduling`. This document describes what that code accepts. If they
+> ever disagree, the code is the bug or this file is.
 
 A workflow is one hand-editable JSON file (ADR-008). Each profile has its own folder:
 
@@ -14,7 +15,20 @@ A workflow is one hand-editable JSON file (ADR-008). Each profile has its own fo
 
 (`OGOC_DATA_DIR` replaces `%LOCALAPPDATA%\OG_opossum_command` when set; see ADR-020.) On first run,
 a profile whose folder is missing or has no `.json` files receives copies of the matching examples
-from `examples\workflows\<work|personal>` next to the exe. Existing files are never overwritten.
+from `examples\workflows\<work|personal>` next to the exe; likewise `examples\scripts\<profile>` is
+copied into the profile's `scripts` folder when that folder is empty. Existing files are never
+overwritten.
+
+## Versions
+
+| `schemaVersion` | Status | What it adds |
+|---|---|---|
+| `1` | still loads | Manual trigger, three Windows actions, dependencies, timeouts, onFailure. |
+| `2` | current | `trigger.type: "schedule"`, per-step `locks`, top-level `aliases`, the `windows.script.run` action. |
+
+A v1 file that uses a v2 feature is rejected with "needs `"schemaVersion": 2`" (ADR-032), so an old
+file never silently changes behaviour. Any other version is rejected naming the range this build
+understands.
 
 ## How files are read
 
@@ -26,49 +40,81 @@ from `examples\workflows\<work|personal>` next to the exe. Existing files are ne
   "Workflow files with problems" and in `--smoke-test` output. Other files still load.
 - Error format: `<file>: <json path>: <message>`, for example
   `C:\...\Work\workflows\focus-mode.json: steps[1].inputs.path: 'path' must point to an .exe file.`
-- The whole file is hashed (SHA-256) and recorded in the `workflows` table so history can tell
-  which version of a definition a run used.
+- The whole file is hashed (SHA-256) and recorded in the `workflows` table and on every run, so
+  history can tell which version of a definition a run used and recovery can tell whether the file
+  changed since (ADR-035).
 
 ## Top level
 
 | Property | Type | Required | Rules |
 |---|---|---|---|
-| `schemaVersion` | integer | yes | Must be `1`. Any other value is rejected with a message naming the version this build understands. |
+| `schemaVersion` | integer | yes | `1` or `2` (see above). |
 | `id` | string | yes | Slug: 1–64 lower-case letters, digits, or hyphens, starting with a letter or digit (`^[a-z0-9][a-z0-9-]{0,63}$`). Unique within the profile; a second file with the same id is reported and skipped. |
 | `name` | string | yes | Shown on the tile. 1–80 characters, not blank. |
 | `description` | string | no | Shown as the tile tooltip. Examples start theirs with `EXAMPLE - edit me`. |
 | `profileId` | string | yes | `"work"` or `"personal"`. **Must match the folder the file is in** (ADR-012). A work file in the personal folder is an error, never a silent move. |
-| `trigger` | object | yes | `{ "type": "manual" }` is the only trigger in v1. Schedules and events come in a later schema version. |
+| `trigger` | object | yes | `{ "type": "manual" }` or a schedule (below). A scheduled workflow can still be run by hand. |
 | `execution` | object | no | See below. |
 | `requiresApproval` | boolean | no | **Reserved** for a future AI-assisted mode (ADR-013). Must be `false` or omitted; `true` is rejected so no file can pretend an approval flow exists before it does. |
+| `aliases` | array of strings | no (v2) | Extra names the command palette matches, 1–40 characters each, e.g. `["swd", "workday"]`. |
 | `steps` | array of objects | yes | At least one step. |
+
+### `trigger` (schedule, v2)
+
+```json
+"trigger": {
+  "type": "schedule",
+  "at": ["08:30", "13:00"],
+  "days": ["mon", "tue", "wed", "thu", "fri"],
+  "timeZone": "Pacific Standard Time",
+  "missedRuns": "run-once",
+  "expiresAfterMinutes": 10
+}
+```
+
+| Property | Type | Required | Rules |
+|---|---|---|---|
+| `at` | array of strings | yes | 1–24 wall-clock times in 24-hour `HH:mm`. Duplicates are merged. |
+| `days` | array of strings | no | Weekdays `"mon"` … `"sun"` (or full names). Omitted = every day. |
+| `timeZone` | string | yes | **Explicit**, always. A Windows ID (`"Pacific Standard Time"`) or an IANA ID (`"America/Los_Angeles"`) this PC knows. The machine's own zone is never assumed. |
+| `missedRuns` | string | no | What to do with occurrences that were due while the app was not running or the PC was asleep. `"skip"` (default): nothing. `"run-once"`: one run now, for the most recent missed occurrence. `"catch-up-limited"`: the most recent missed occurrences, one after another, at most `catchUpLimit`. |
+| `catchUpLimit` | integer | with `catch-up-limited` | 1–10. Not allowed with the other policies. |
+| `expiresAfterMinutes` | integer | no | 1–1440, default 5. An occurrence found within this many minutes of its time is "on time" and runs at once; older ones are "missed" and follow `missedRuns`. |
+
+Daylight-saving rules (ADR-034): a time that does not exist on a day (spring forward, e.g. 02:30 on
+the day clocks jump from 02:00 to 03:00) runs at the first minute that does exist (03:00). A time
+that exists twice (fall back) runs **once**, at its first pass. An occurrence never fires twice,
+even across a restart: the scheduler records the latest occurrence it has accounted for *before*
+starting a run. If the workflow is still running when its next occurrence comes due, that occurrence
+is suppressed (focus-existing), not queued. Occurrences more than 7 days old are never considered.
+Settings → "Pause all schedules" skips due occurrences instead of deferring them.
 
 ### `execution`
 
 | Property | Type | Default | Rules |
 |---|---|---|---|
 | `maxParallelSteps` | integer | `1` | 1–8. How many steps may run at the same time once their dependencies are complete. |
-| `onDuplicate` | string | `"focus-existing"` | The only policy in v1: pressing a tile while that workflow is still Queued, Running, or Cancelling does **not** start a second run; the dashboard shows the existing one. |
+| `onDuplicate` | string | `"focus-existing"` | The only policy: pressing a tile (or a schedule firing) while that workflow is still Queued, Running, or Cancelling does **not** start a second run; the dashboard shows the existing one. |
 
 ## Steps
 
 | Property | Type | Required | Rules |
 |---|---|---|---|
 | `id` | string | yes | Slug (same pattern as the workflow id). Unique within the file. |
-| `name` | string | no | Shown in progress and history. Defaults to the action's display name (`Open web page`, `Launch program`, `Open folder`). |
+| `name` | string | no | Shown in progress and history. Defaults to the action's display name. |
 | `action` | string | yes | One of the stable action IDs below. Unknown IDs are rejected with the list of known ones. An action outside the profile's allowlist is rejected here **and** again by the engine at start (ADR-025). |
 | `inputs` | object | yes | Shape depends on `action`; validated by the action itself at load time. |
 | `timeoutSeconds` | integer | no | 1–3600. Defaults to the action's own default. On timeout the step fails with error code `timeout` and any launched process tree is killed. |
 | `dependsOn` | array of strings | no | Step ids that must be **Completed** first. Unknown ids, self-references, and cycles are rejected. If a dependency fails, is skipped, or is cancelled, this step is Skipped (`dependency-failed`). |
 | `onFailure` | string | no | `"stop"` (default): no further steps start and the run ends Failed. `"continue"`: steps that do not depend on the failed one still run; the run still ends Failed. |
+| `locks` | array of strings | no (v2) | Resource locks, `"<kind>:<name>"` with kind `window`, `file`, or `custom`. Steps that share a lock never run at the same time, in this run or any other, even with `maxParallelSteps > 1`. `file:` names must be full paths (`%VAR%` allowed) and are compared case-insensitively. Locks are released when the step ends, including on cancel or failure (ADR-033). |
 
-There is no `retry` in v1. Launching a program is not safely repeatable (spec §06), and the only
-retry-safe actions here finish in milliseconds. Retry policy arrives with the durable-automation
-phase and a schema bump.
+There is no `retry`. Launching a program or script is not safely repeatable (spec §06), and the
+retry-safe actions here finish in milliseconds.
 
 ## Actions
 
-All three run through injectable launchers, so tests and the smoke modes never open anything real
+All actions run through injectable launchers, so tests and the smoke modes never open anything real
 (rule 7). `%VAR%` environment references (`%USERPROFILE%`, `%SystemRoot%`, …) are allowed in every
 path-like input and are expanded **at run time**, so a file can be shared between machines.
 
@@ -100,33 +146,68 @@ Idempotent. Default timeout 15 s. Opens the folder in the shell's file manager.
 
 Non-idempotent. Default timeout 5 minutes (only matters with `waitForExit: true`).
 
-## Complete example
+### `windows.script.run` — Run script (v2)
+
+Runs a **trusted script from the profile's own scripts folder** and nothing else (ADR-031):
+
+```
+%LOCALAPPDATA%\OG_opossum_command\profiles\<Work|Personal>\scripts\
+```
+
+| Input | Type | Default | Rules |
+|---|---|---|---|
+| `interpreter` | string | — | `"powershell"` (Windows PowerShell 5.1, run as `powershell.exe -NoProfile -NonInteractive -File <script> <arguments…>`) or `"cmd"` (`cmd.exe /d /c <script> <arguments…>`). Always the copy under `%SystemRoot%\System32`. |
+| `script` | string | — | A **bare file name** inside the scripts folder: letters, digits, spaces, `.`, `_`, `-`; no folders, no `..`. Extension must match the interpreter (`.ps1` ↔ powershell; `.cmd`/`.bat` ↔ cmd). The resolved path is checked again at run time to be inside the folder (`script-outside-folder`); a missing file fails with `script-not-found`. |
+| `arguments` | array of strings | `[]` | Passed after the script path, one element per argument, `%VAR%` expanded. |
+
+Non-idempotent. Default timeout 5 minutes. Always waits for exit and captures stdout/stderr (same
+bounds as `windows.process.launch`); the script's working directory is the scripts folder. A
+non-zero exit fails the step with `exit-code`. If PowerShell refuses the script because of the
+PC's **execution policy**, the step fails with `execution-policy-blocked` and a message that says so
+and lists the options (ask IT, or write the script as `.cmd`). The app never passes
+`-ExecutionPolicy` and never changes policy (rule 2).
+
+## Complete example (v2, scheduled, with a lock and aliases)
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "start-workday",
   "name": "Start Workday",
-  "description": "EXAMPLE - edit me. Opens Outlook and Teams on the web, then the Documents folder.",
+  "description": "Opens Outlook and Teams on the web, then the Documents folder.",
   "profileId": "work",
-  "trigger": { "type": "manual" },
+  "aliases": ["swd", "workday"],
+  "trigger": {
+    "type": "schedule",
+    "at": ["08:30"],
+    "days": ["mon", "tue", "wed", "thu", "fri"],
+    "timeZone": "Pacific Standard Time",
+    "missedRuns": "run-once"
+  },
   "execution": { "maxParallelSteps": 2, "onDuplicate": "focus-existing" },
   "steps": [
     { "id": "outlook",   "name": "Open Outlook (web)", "action": "windows.url.open",
-      "inputs": { "url": "https://outlook.office.com/mail/" }, "timeoutSeconds": 15 },
+      "inputs": { "url": "https://outlook.office.com/mail/" }, "timeoutSeconds": 15, "locks": ["window:browser"] },
     { "id": "teams",     "name": "Open Teams (web)",   "action": "windows.url.open",
-      "inputs": { "url": "https://teams.microsoft.com/" }, "timeoutSeconds": 15 },
+      "inputs": { "url": "https://teams.microsoft.com/" }, "timeoutSeconds": 15, "locks": ["window:browser"] },
     { "id": "documents", "name": "Open Documents folder", "action": "windows.folder.open",
       "inputs": { "path": "%USERPROFILE%\\Documents" }, "dependsOn": ["outlook", "teams"], "onFailure": "continue" }
   ]
 }
 ```
 
+The shipped examples are all manual; none of them is scheduled, so installing the app never starts
+anything on its own.
+
 ## Run states a workflow can reach
 
 `Queued → Running → Completed | Failed | Cancelling → Cancelled`. A run that was still active when
-the app stopped is marked `Interrupted` on the next start (never resumed automatically in this
-version). `NeedsAttention` is reserved for the recovery review of a later phase. See `docs/ARCHITECTURE.md` §06.
+the app stopped is marked `Interrupted` on the next start and reviewed (ADR-035): if every unfinished
+step is safe to repeat (never started, or an idempotent action such as opening a URL) and the file is
+unchanged, a new run resumes it automatically, skipping the steps that already completed. Otherwise
+the run becomes `NeedsAttention` with a plain explanation and waits on the dashboard for **Resume**
+(a new run from the current file, completed steps not repeated) or **Dismiss**. See
+`docs/ARCHITECTURE.md` §06 and §13.
 
 ## Profile policy file (optional)
 
@@ -136,7 +217,7 @@ version). `NeedsAttention` is reserved for the recovery review of a later phase.
 { "allowedActions": ["windows.url.open", "windows.folder.open"] }
 ```
 
-Without the file a profile may run every built-in action. An unreadable or invalid policy file is
-reported as an error and the profile falls back to the built-in default (ADR-025). The engine
-refuses to start any workflow whose steps use an action outside the allowlist, even if the
-definition somehow bypassed the loader.
+Without the file a profile may run every built-in action (including `windows.script.run`). An
+unreadable or invalid policy file is reported as an error and the profile falls back to the built-in
+default (ADR-025). The engine refuses to start any workflow whose steps use an action outside the
+allowlist, even if the definition somehow bypassed the loader.

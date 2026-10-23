@@ -55,6 +55,9 @@ public sealed class AppPaths : IAppPaths
     /// <inheritdoc />
     public string GetProfileWorkflowsDirectory(ProfileId profile) => Path.Combine(GetProfileDirectory(profile), "workflows");
 
+    /// <inheritdoc />
+    public string GetProfileScriptsDirectory(ProfileId profile) => Path.Combine(GetProfileDirectory(profile), "scripts");
+
     /// <summary>Resolves paths from the real process environment.</summary>
     public static AppPaths FromEnvironment() =>
         Resolve(

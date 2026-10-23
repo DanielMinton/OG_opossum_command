@@ -92,17 +92,18 @@ public sealed class SqliteHistoryStoreTests : IDisposable
         }
 
         using var reopened = SqliteHistoryStore.Open(_root.Paths.DatabasePath);
-        var count = reopened.MarkInterrupted(DateTimeOffset.UtcNow);
+        var ids = reopened.MarkInterrupted(DateTimeOffset.UtcNow);
 
-        Assert.Equal(1, count);
+        Assert.Equal([active], ids);
         var interrupted = reopened.GetExecution(active)!;
         Assert.Equal(ExecutionStatus.Interrupted, interrupted.Status);
+        Assert.Equal(RecoveryStates.Pending, interrupted.Recovery);
         Assert.NotNull(interrupted.FinishedAt);
         Assert.Contains("stopped while this run was active", interrupted.Error, StringComparison.Ordinal);
         Assert.Equal([StepStatus.Completed, StepStatus.Interrupted, StepStatus.Interrupted], interrupted.Steps.Select(s => s.Status));
         Assert.Contains(reopened.GetEvents(active), e => e.EventType == "execution.interrupted");
         Assert.Equal(ExecutionStatus.Completed, reopened.GetExecution(done)!.Status);
-        Assert.Equal(0, reopened.MarkInterrupted(DateTimeOffset.UtcNow));
+        Assert.Empty(reopened.MarkInterrupted(DateTimeOffset.UtcNow));
     }
 
     [Fact]

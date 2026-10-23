@@ -28,4 +28,7 @@ public interface IAppPaths
 
     /// <summary>A profile's hand-editable workflow files (JSON, ADR-008): <c>&lt;DataRoot&gt;\profiles\&lt;Work|Personal&gt;\workflows</c>.</summary>
     string GetProfileWorkflowsDirectory(ProfileId profile);
+
+    /// <summary>A profile's trusted scripts, the only place <c>windows.script.run</c> may read from (ADR-031): <c>&lt;DataRoot&gt;\profiles\&lt;Work|Personal&gt;\scripts</c>.</summary>
+    string GetProfileScriptsDirectory(ProfileId profile);
 }

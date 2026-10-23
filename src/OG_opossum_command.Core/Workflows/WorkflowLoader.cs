@@ -1,9 +1,11 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using OG_opossum_command.Core.Actions;
 using OG_opossum_command.Core.Profiles;
+using OG_opossum_command.Core.Scheduling;
 
 namespace OG_opossum_command.Core.Workflows;
 
@@ -125,13 +127,16 @@ public sealed partial class WorkflowLoader
 
     private WorkflowDefinition? Validate(JsonObjectReader root, Profile profile, string source, string hash)
     {
-        root.RejectUnknownProperties("schemaVersion", "id", "name", "description", "profileId", "trigger", "execution", "requiresApproval", "steps");
+        root.RejectUnknownProperties("schemaVersion", "id", "name", "description", "profileId", "trigger", "execution", "requiresApproval", "steps", "aliases");
 
         var schemaVersion = root.RequiredInt("schemaVersion", 1, int.MaxValue);
-        if (schemaVersion is not null && schemaVersion != WorkflowDefinition.CurrentSchemaVersion)
+        if (schemaVersion is not null && (schemaVersion < WorkflowDefinition.OldestSupportedSchemaVersion || schemaVersion > WorkflowDefinition.CurrentSchemaVersion))
         {
-            root.AddError("schemaVersion", $"This version of the app understands schemaVersion {WorkflowDefinition.CurrentSchemaVersion} only (file says {schemaVersion}).");
+            root.AddError("schemaVersion", $"This version of the app understands schemaVersion {WorkflowDefinition.OldestSupportedSchemaVersion} to {WorkflowDefinition.CurrentSchemaVersion} (file says {schemaVersion}).");
         }
+
+        // Features that arrived with schema v2 are rejected in a v1 file so an old file never silently gains behaviour (ADR-032).
+        var isV2 = schemaVersion >= 2;
 
         var id = root.RequiredString("id");
         if (id is not null && !SlugPattern().IsMatch(id))
@@ -160,14 +165,19 @@ public sealed partial class WorkflowLoader
             }
         }
 
-        var trigger = root.RequiredObject("trigger");
-        if (trigger is not null)
+        var trigger = ValidateTrigger(root.RequiredObject("trigger"), isV2);
+
+        var aliases = root.OptionalStringArray("aliases") ?? [];
+        if (aliases.Count > 0 && !isV2)
         {
-            trigger.RejectUnknownProperties("type");
-            var type = trigger.RequiredString("type");
-            if (type is not null && type != "manual")
+            root.AddError("aliases", "'aliases' needs \"schemaVersion\": 2.");
+        }
+
+        foreach (var alias in aliases)
+        {
+            if (string.IsNullOrWhiteSpace(alias) || alias.Length > 40)
             {
-                trigger.AddError("type", $"Only \"manual\" triggers exist in this version (got '{type}'). Schedules come in a later version.");
+                root.AddError("aliases", $"Alias '{alias}' must be 1-40 characters.");
             }
         }
 
@@ -191,27 +201,185 @@ public sealed partial class WorkflowLoader
             root.AddError("requiresApproval", "'requiresApproval' is reserved for a future AI-assisted mode and must be false (or omitted) in this version.");
         }
 
-        var steps = ValidateSteps(root, profile);
-        if (id is null || name is null || steps is null)
+        var steps = ValidateSteps(root, profile, isV2);
+        if (id is null || name is null || steps is null || trigger is null || schemaVersion is null)
         {
             return null;
         }
 
         return new WorkflowDefinition(
-            WorkflowDefinition.CurrentSchemaVersion,
+            schemaVersion.Value,
             id,
             name,
             description,
             profile.Id,
+            trigger,
             maxParallel,
             onDuplicate,
             requiresApproval,
             steps,
+            aliases.Select(a => a.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
             source,
             hash);
     }
 
-    private List<StepDefinition>? ValidateSteps(JsonObjectReader root, Profile profile)
+    private static TriggerDefinition? ValidateTrigger(JsonObjectReader? trigger, bool isV2)
+    {
+        if (trigger is null)
+        {
+            return null;
+        }
+
+        var type = trigger.RequiredString("type");
+        switch (type)
+        {
+            case null:
+                return null;
+            case "manual":
+                trigger.RejectUnknownProperties("type");
+                return TriggerDefinition.Manual;
+            case "schedule":
+                if (!isV2)
+                {
+                    trigger.AddError("type", "A \"schedule\" trigger needs \"schemaVersion\": 2.");
+                    return null;
+                }
+
+                var schedule = ValidateSchedule(trigger);
+                return schedule is null ? null : new TriggerDefinition(TriggerType.Schedule, schedule);
+            default:
+                trigger.AddError("type", $"'trigger.type' must be \"manual\" or \"schedule\" (got '{type}').");
+                return null;
+        }
+    }
+
+    private static ScheduleDefinition? ValidateSchedule(JsonObjectReader trigger)
+    {
+        trigger.RejectUnknownProperties("type", "at", "days", "timeZone", "missedRuns", "catchUpLimit", "expiresAfterMinutes");
+        var ok = true;
+
+        var times = new List<TimeOnly>();
+        var atTexts = trigger.OptionalStringArray("at");
+        if (atTexts is null)
+        {
+            if (!trigger.Has("at"))
+            {
+                trigger.AddError("at", "A schedule needs 'at': an array of wall-clock times such as [\"08:30\", \"13:00\"].");
+            }
+
+            ok = false;
+        }
+        else
+        {
+            if (atTexts.Count == 0 || atTexts.Count > ScheduleDefinition.MaxTimes)
+            {
+                trigger.AddError("at", $"'at' must list 1 to {ScheduleDefinition.MaxTimes} times.");
+                ok = false;
+            }
+
+            foreach (var text in atTexts)
+            {
+                if (TimeOnly.TryParseExact(text, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var time))
+                {
+                    times.Add(time);
+                }
+                else
+                {
+                    trigger.AddError("at", $"'{text}' is not a time in 24-hour HH:mm form (for example \"08:30\").");
+                    ok = false;
+                }
+            }
+        }
+
+        var days = new List<DayOfWeek>();
+        var dayTexts = trigger.OptionalStringArray("days");
+        if (dayTexts is null)
+        {
+            if (trigger.Has("days"))
+            {
+                ok = false;
+            }
+            else
+            {
+                days.AddRange(Enum.GetValues<DayOfWeek>());
+            }
+        }
+        else
+        {
+            if (dayTexts.Count == 0)
+            {
+                trigger.AddError("days", "'days' must name at least one weekday (\"mon\" … \"sun\"), or be omitted for every day.");
+                ok = false;
+            }
+
+            foreach (var text in dayTexts)
+            {
+                if (ScheduleDefinition.TryParseDay(text, out var day))
+                {
+                    days.Add(day);
+                }
+                else
+                {
+                    trigger.AddError("days", $"'{text}' is not a weekday. Use \"mon\", \"tue\", \"wed\", \"thu\", \"fri\", \"sat\", \"sun\".");
+                    ok = false;
+                }
+            }
+        }
+
+        var timeZoneId = trigger.RequiredString("timeZone");
+        if (timeZoneId is not null && !TimeZoneInfo.TryFindSystemTimeZoneById(timeZoneId, out _))
+        {
+            trigger.AddError("timeZone", $"'timeZone' \"{timeZoneId}\" is not a time zone this PC knows. Use a Windows ID such as \"Pacific Standard Time\" or an IANA ID such as \"America/Los_Angeles\".");
+            timeZoneId = null;
+        }
+
+        var policy = MissedRunPolicy.Skip;
+        var policyText = trigger.OptionalString("missedRuns");
+        if (policyText is not null && !ScheduleDefinition.TryParsePolicy(policyText, out policy))
+        {
+            trigger.AddError("missedRuns", $"'missedRuns' must be \"skip\", \"run-once\", or \"catch-up-limited\" (got '{policyText}').");
+            ok = false;
+        }
+
+        var catchUpLimit = trigger.OptionalInt("catchUpLimit", 1, ScheduleDefinition.MaxCatchUpLimit);
+        if (policy == MissedRunPolicy.CatchUpLimited && catchUpLimit is null)
+        {
+            if (!trigger.Has("catchUpLimit"))
+            {
+                trigger.AddError("catchUpLimit", $"\"catch-up-limited\" needs 'catchUpLimit' (1 to {ScheduleDefinition.MaxCatchUpLimit}).");
+            }
+
+            ok = false;
+        }
+        else if (policy != MissedRunPolicy.CatchUpLimited && trigger.Has("catchUpLimit"))
+        {
+            trigger.AddError("catchUpLimit", "'catchUpLimit' only applies with \"missedRuns\": \"catch-up-limited\".");
+            ok = false;
+        }
+
+        var expiresValue = trigger.OptionalInt("expiresAfterMinutes", 1, ScheduleDefinition.MaxExpiresAfterMinutes);
+        if (trigger.Has("expiresAfterMinutes") && expiresValue is null)
+        {
+            ok = false;
+        }
+
+        var expires = expiresValue ?? ScheduleDefinition.DefaultExpiresAfterMinutes;
+
+        if (!ok || timeZoneId is null)
+        {
+            return null;
+        }
+
+        return new ScheduleDefinition(
+            times.Distinct().Order().ToList(),
+            days.Distinct().Order().ToList(),
+            timeZoneId,
+            policy,
+            policy == MissedRunPolicy.CatchUpLimited ? catchUpLimit!.Value : 1,
+            TimeSpan.FromMinutes(expires));
+    }
+
+    private List<StepDefinition>? ValidateSteps(JsonObjectReader root, Profile profile, bool isV2)
     {
         var stepReaders = root.RequiredObjectArray("steps");
         if (stepReaders is null)
@@ -230,7 +398,7 @@ public sealed partial class WorkflowLoader
         var ok = true;
         foreach (var reader in stepReaders)
         {
-            reader.RejectUnknownProperties("id", "name", "action", "inputs", "timeoutSeconds", "dependsOn", "onFailure");
+            reader.RejectUnknownProperties("id", "name", "action", "inputs", "timeoutSeconds", "dependsOn", "onFailure", "locks");
 
             var stepId = reader.RequiredString("id");
             if (stepId is not null)
@@ -290,6 +458,30 @@ public sealed partial class WorkflowLoader
                 }
             }
 
+            var locks = new List<string>();
+            var lockTexts = reader.OptionalStringArray("locks");
+            if (lockTexts is not null && !isV2)
+            {
+                reader.AddError("locks", "'locks' needs \"schemaVersion\": 2.");
+                ok = false;
+            }
+            else if (lockTexts is not null)
+            {
+                foreach (var text in lockTexts)
+                {
+                    var problem = Engine.ResourceLocks.Normalize(text, out var key);
+                    if (problem is null)
+                    {
+                        locks.Add(key);
+                    }
+                    else
+                    {
+                        reader.AddError("locks", problem);
+                        ok = false;
+                    }
+                }
+            }
+
             if (stepId is null || actionId is null || inputs is null || inputsReader is null)
             {
                 ok = false;
@@ -304,7 +496,8 @@ public sealed partial class WorkflowLoader
                 inputsReader.Element.Clone(),
                 timeoutSeconds is null ? null : TimeSpan.FromSeconds(timeoutSeconds.Value),
                 dependsOn,
-                onFailure));
+                onFailure,
+                locks.Distinct(StringComparer.Ordinal).ToList()));
         }
 
         if (!ok)

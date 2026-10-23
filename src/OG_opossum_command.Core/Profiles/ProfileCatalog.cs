@@ -40,7 +40,7 @@ public sealed class ProfileCatalog
         {
             var policyPath = Path.Combine(paths.GetProfileDirectory(id), PolicyFileName);
             var allowed = File.Exists(policyPath) ? ReadAllowlist(policyPath, registry, errors) : null;
-            profiles.Add(new Profile(id, paths.GetProfileWorkflowsDirectory(id), allowed ?? registry.Ids));
+            profiles.Add(new Profile(id, paths.GetProfileWorkflowsDirectory(id), paths.GetProfileScriptsDirectory(id), allowed ?? registry.Ids));
         }
 
         return new ProfileCatalog(profiles, errors);

@@ -9,3 +9,4 @@ artifacts/
 *.db-wal
 *.db-shm
 TestResults/
+.claude/worktrees/

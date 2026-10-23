@@ -39,6 +39,7 @@ public sealed class ActionRegistry
             new ProcessLaunchAction(launchers.Processes),
             new UrlOpenAction(launchers.Urls),
             new FolderOpenAction(launchers.Folders),
+            new ScriptRunAction(launchers.Processes),
         ]);
     }
 }

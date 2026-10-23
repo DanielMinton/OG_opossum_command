@@ -65,6 +65,17 @@
                     Command="{Binding ShowHistoryCommand}"
                     Margin="0,0,8,0"
                     AutomationProperties.Name="Show history" />
+            <Button Content="_Settings"
+                    Style="{StaticResource OgocButton}"
+                    Command="{Binding ShowSettingsCommand}"
+                    Margin="0,0,8,0"
+                    AutomationProperties.Name="Show settings" />
+            <Button Content="Command _palette"
+                    Style="{StaticResource OgocButton}"
+                    Command="{Binding OpenPaletteCommand}"
+                    Margin="0,0,8,0"
+                    AutomationProperties.Name="Open the command palette"
+                    AutomationProperties.HelpText="Also opened by the global hotkey, Ctrl+Alt+Space by default" />
             <Button Content="Hide to _tray"
                     Style="{StaticResource OgocButton}"
                     Command="{Binding HideCommand}"

@@ -21,8 +21,11 @@ public sealed class FirstRunSeederTests : IDisposable
 
         Assert.Equal(2, results.Count);
         Assert.Equal(["focus-mode.json", "start-workday.json"], results[0].CopiedFiles.Select(Path.GetFileName));
-        Assert.Equal(["plan-tomorrow.json"], results[1].CopiedFiles.Select(Path.GetFileName));
+        Assert.Equal(["hello-script.json", "plan-tomorrow.json"], results[1].CopiedFiles.Select(Path.GetFileName));
         Assert.Null(results[0].Reason);
+        Assert.Equal(["hello.cmd"], results[1].CopiedScripts.Select(Path.GetFileName));
+        Assert.Empty(results[0].CopiedScripts);
+        Assert.True(Directory.Exists(work.ScriptsDirectory), "the scripts folder is created even when there is nothing to copy");
         Assert.True(File.Exists(Path.Combine(work.WorkflowsDirectory, "start-workday.json")));
         Assert.False(File.Exists(Path.Combine(personal.WorkflowsDirectory, "start-workday.json")), "work examples leaked into the personal profile");
     }

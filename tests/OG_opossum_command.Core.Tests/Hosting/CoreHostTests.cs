@@ -22,8 +22,9 @@ public sealed class CoreHostTests : IDisposable
             Assert.Equal(0, host.InterruptedOnStartup);
             Assert.All(host.Seeding, s => Assert.NotEmpty(s.CopiedFiles));
             Assert.Equal(2, host.GetWorkflows(ProfileId.Work).Workflows.Count);
-            Assert.Single(host.GetWorkflows(ProfileId.Personal).Workflows);
+            Assert.Equal(2, host.GetWorkflows(ProfileId.Personal).Workflows.Count);
             Assert.Empty(host.Workflows.SelectMany(w => w.Errors));
+            Assert.True(File.Exists(Path.Combine(host.Profiles.Get(ProfileId.Personal).ScriptsDirectory, "hello.cmd")), "example script was not seeded");
 
             var started = host.Run(ProfileId.Work, "start-workday");
             using var cts = new CancellationTokenSource(Timeout);
@@ -58,12 +59,46 @@ public sealed class CoreHostTests : IDisposable
                 [new StepSnapshot("s0", "Step", "windows.url.open", 0, StepStatus.Running, now, null, null, null, null)]));
         }
 
-        using var reopened = CoreHost.Open(_root.Paths, new RecordingLaunchers().Set, _root.EmptyExamplesRoot);
+        using var reopened = CoreHost.Open(_root.Paths, new RecordingLaunchers().Set, _root.EmptyExamplesRoot, new CoreHostOptions(ReviewInterruptedRuns: false));
 
         Assert.Equal(1, reopened.InterruptedOnStartup);
         var run = reopened.History.GetExecution(id)!;
         Assert.Equal(ExecutionStatus.Interrupted, run.Status);
         Assert.Equal(StepStatus.Interrupted, run.Steps[0].Status);
+    }
+
+    [Fact]
+    public void An_interrupted_run_whose_workflow_file_is_missing_becomes_NeedsAttention_instead_of_failing_startup()
+    {
+        var id = Guid.NewGuid();
+        using (var host = CoreHost.Open(_root.Paths, new RecordingLaunchers().Set, _root.EmptyExamplesRoot))
+        {
+            var now = DateTimeOffset.UtcNow;
+            host.History.SaveExecution(new ExecutionSnapshot(id, ProfileId.Personal, "wf", "Crashy", ExecutionStatus.Running, now, now, null, null,
+                [new StepSnapshot("s0", "Step", "windows.url.open", 0, StepStatus.Running, now, null, null, null, null)]));
+        }
+
+        using var reopened = CoreHost.Open(_root.Paths, new RecordingLaunchers().Set, _root.EmptyExamplesRoot);
+
+        var decision = Assert.Single(reopened.RecoveryDecisions);
+        Assert.Equal(RecoveryStates.NeedsAttention, decision.Outcome);
+        Assert.Contains("no longer loads", decision.Explanation, StringComparison.Ordinal);
+        var run = Assert.Single(reopened.NeedsAttention);
+        Assert.Equal(id, run.Id);
+        Assert.Equal(ExecutionStatus.NeedsAttention, run.Status);
+    }
+
+    [Fact]
+    public void Search_matches_names_aliases_and_ids_across_both_profiles()
+    {
+        using var host = CoreHost.Open(_root.Paths, new RecordingLaunchers().Set, TempDataRoot.ExamplesRoot);
+
+        Assert.Equal(["hello-script"], host.Search("hello").Select(m => m.Workflow.Id));
+        Assert.Equal(["hello-script"], host.Search("script demo").Select(m => m.Workflow.Id));
+        Assert.Equal(["start-workday"], host.Search("start").Select(m => m.Workflow.Id));
+        Assert.Equal(ProfileId.Work, host.Search("focus").Single().Profile.Id);
+        Assert.Equal(4, host.Search(string.Empty).Count);
+        Assert.Empty(host.Search("zzz-nothing"));
     }
 
     [Fact]

@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:dashboard="clr-namespace:OG_opossum_command.Desktop.Dashboard"
              xmlns:history="clr-namespace:OG_opossum_command.Desktop.History"
+             xmlns:settings="clr-namespace:OG_opossum_command.Desktop.Settings"
              ShutdownMode="OnExplicitShutdown">
     <!-- No StartupUri: Program.Main decides whether a window is shown at all. -->
     <Application.Resources>
@@ -67,6 +68,10 @@
 
         <DataTemplate DataType="{x:Type history:HistoryViewModel}">
             <history:HistoryView />
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type settings:SettingsViewModel}">
+            <settings:SettingsView />
         </DataTemplate>
 
     </Application.Resources>

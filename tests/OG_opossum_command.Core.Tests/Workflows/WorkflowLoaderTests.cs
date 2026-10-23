@@ -59,7 +59,7 @@ public sealed class WorkflowLoaderTests : IDisposable
         var personal = Directory.GetFiles(Path.Combine(TempDataRoot.ExamplesRoot, "personal"), "*.json");
 
         Assert.Equal(2, work.Length);
-        Assert.Single(personal);
+        Assert.Equal(2, personal.Length);
         foreach (var file in work)
         {
             var result = loader.LoadFile(file, _work);
@@ -100,11 +100,11 @@ public sealed class WorkflowLoaderTests : IDisposable
     [Fact]
     public void Rejects_a_newer_schema_version()
     {
-        var errors = TestSupport.LoadInvalid(_registry, _work, Minimal.Replace("\"schemaVersion\": 1", "\"schemaVersion\": 2", StringComparison.Ordinal));
+        var errors = TestSupport.LoadInvalid(_registry, _work, Minimal.Replace("\"schemaVersion\": 1", "\"schemaVersion\": 3", StringComparison.Ordinal));
 
         var error = Assert.Single(errors);
         Assert.Equal("schemaVersion", error.JsonPath);
-        Assert.Contains("understands schemaVersion 1 only", error.Message, StringComparison.Ordinal);
+        Assert.Contains("understands schemaVersion 1 to 2", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -177,7 +177,7 @@ public sealed class WorkflowLoaderTests : IDisposable
 
         var error = Assert.Single(errors);
         Assert.Equal("steps[0].action", error.JsonPath);
-        Assert.Contains("windows.folder.open, windows.process.launch, windows.url.open", error.Message, StringComparison.Ordinal);
+        Assert.Contains("windows.folder.open, windows.process.launch, windows.script.run, windows.url.open", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]

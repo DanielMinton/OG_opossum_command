@@ -18,6 +18,8 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -54,8 +56,69 @@
                    TextWrapping="Wrap"
                    AutomationProperties.LiveSetting="Polite" />
 
+        <!-- Next schedule occurrence (spec §08) -->
+        <TextBlock Grid.Row="2"
+                   Margin="6,2,6,0"
+                   Text="{Binding NextScheduled}"
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+
+        <!-- Interrupted runs waiting for the operator (spec §13 Needs attention) -->
+        <Border Grid.Row="3"
+                Margin="6,6,6,0"
+                Padding="8"
+                BorderThickness="2"
+                BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
+                Visibility="{Binding HasAttention, Converter={StaticResource BoolToVis}}"
+                AutomationProperties.Name="Runs that need attention">
+            <StackPanel>
+                <TextBlock Style="{StaticResource OgocHeading}" Text="NEEDS ATTENTION (the app stopped while these were running)" />
+                <ItemsControl ItemsSource="{Binding Attention}" Focusable="False" KeyboardNavigation.TabNavigation="Continue">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type local:AttentionItem}">
+                            <Grid Margin="0,2" AutomationProperties.Name="{Binding AutomationName}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock FontWeight="SemiBold">
+                                        <Run Text="{Binding WorkflowName, Mode=OneWay}" />
+                                        <Run Text=" · " />
+                                        <Run Text="{Binding Profile, Mode=OneWay}" />
+                                        <Run Text=" · " />
+                                        <Run Text="{Binding When, Mode=OneWay}" />
+                                    </TextBlock>
+                                    <TextBlock Text="{Binding Explanation}" TextWrapping="Wrap" FontSize="12" />
+                                </StackPanel>
+                                <Button Grid.Column="1"
+                                        Content="_Resume"
+                                        Style="{StaticResource OgocButton}"
+                                        Margin="8,0,0,0"
+                                        VerticalAlignment="Center"
+                                        Command="{Binding DataContext.ResumeCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        CommandParameter="{Binding}"
+                                        AutomationProperties.Name="Resume this run"
+                                        AutomationProperties.HelpText="Starts a new run; steps that already completed are not repeated" />
+                                <Button Grid.Column="2"
+                                        Content="_Dismiss"
+                                        Style="{StaticResource OgocButton}"
+                                        Margin="8,0,0,0"
+                                        VerticalAlignment="Center"
+                                        Command="{Binding DataContext.DismissCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        CommandParameter="{Binding}"
+                                        AutomationProperties.Name="Dismiss this run"
+                                        AutomationProperties.HelpText="Leaves things as they are; nothing is re-run" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Border>
+
         <!-- Workflow files that did not validate -->
-        <Border Grid.Row="2"
+        <Border Grid.Row="4"
                 Margin="6,6,6,0"
                 Padding="8"
                 BorderThickness="1"
@@ -74,7 +137,7 @@
         </Border>
 
         <!-- Active execution -->
-        <Border Grid.Row="3"
+        <Border Grid.Row="5"
                 Margin="6,8,6,0"
                 Padding="10"
                 BorderThickness="2"
@@ -116,7 +179,7 @@
         </Border>
 
         <!-- Recent runs -->
-        <DockPanel Grid.Row="4" Margin="6,10,6,0">
+        <DockPanel Grid.Row="6" Margin="6,10,6,0">
             <TextBlock DockPanel.Dock="Top" Style="{StaticResource OgocHeading}" Text="RECENT RUNS" />
             <ListView ItemsSource="{Binding RecentRuns}"
                       Style="{StaticResource OgocList}"

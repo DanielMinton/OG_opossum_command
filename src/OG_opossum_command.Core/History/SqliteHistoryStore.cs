@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.Data.Sqlite;
 using OG_opossum_command.Core.Engine;
 using OG_opossum_command.Core.Profiles;
+using OG_opossum_command.Core.Scheduling;
 using OG_opossum_command.Core.Workflows;
 
 namespace OG_opossum_command.Core.History;
@@ -12,6 +13,9 @@ namespace OG_opossum_command.Core.History;
 /// </summary>
 public sealed class SqliteHistoryStore : IHistoryStore
 {
+    private const string ExecutionColumns = "id, profile_id, workflow_id, workflow_name, status, queued_at, started_at, finished_at, error, workflow_hash, trigger_source, scheduled_for, resumed_from, recovery";
+    private const string TriggerColumns = "id, profile_id, workflow_id, type, enabled, config_json, config_hash, next_due_at, last_fired_for, last_fired_at, last_outcome, updated_at";
+
     private readonly SqliteConnection _connection;
     private readonly Lock _gate = new();
     private bool _disposed;
@@ -114,16 +118,18 @@ public sealed class SqliteHistoryStore : IHistoryStore
         ArgumentNullException.ThrowIfNull(execution);
         lock (_gate)
         {
+            ThrowIfDisposed();
             using var transaction = _connection.BeginTransaction();
 
             using (var command = _connection.CreateCommand())
             {
                 command.Transaction = transaction;
                 command.CommandText = """
-                    INSERT INTO executions (id, profile_id, workflow_id, workflow_name, status, queued_at, started_at, finished_at, error)
-                    VALUES ($id, $profile, $workflow, $name, $status, $queued, $started, $finished, $error)
+                    INSERT INTO executions (id, profile_id, workflow_id, workflow_name, status, queued_at, started_at, finished_at, error, workflow_hash, trigger_source, scheduled_for, resumed_from, recovery)
+                    VALUES ($id, $profile, $workflow, $name, $status, $queued, $started, $finished, $error, $hash, $source, $scheduled, $resumed, $recovery)
                     ON CONFLICT (id) DO UPDATE SET
-                        status = excluded.status, started_at = excluded.started_at, finished_at = excluded.finished_at, error = excluded.error;
+                        status = excluded.status, started_at = excluded.started_at, finished_at = excluded.finished_at, error = excluded.error,
+                        recovery = excluded.recovery;
                     """;
                 command.Parameters.AddWithValue("$id", execution.Id.ToString("D"));
                 command.Parameters.AddWithValue("$profile", execution.Profile.ToJsonValue());
@@ -134,6 +140,11 @@ public sealed class SqliteHistoryStore : IHistoryStore
                 command.Parameters.AddWithValue("$started", (object?)Format(execution.StartedAt) ?? DBNull.Value);
                 command.Parameters.AddWithValue("$finished", (object?)Format(execution.FinishedAt) ?? DBNull.Value);
                 command.Parameters.AddWithValue("$error", (object?)execution.Error ?? DBNull.Value);
+                command.Parameters.AddWithValue("$hash", execution.WorkflowHash);
+                command.Parameters.AddWithValue("$source", execution.TriggerSource);
+                command.Parameters.AddWithValue("$scheduled", (object?)Format(execution.ScheduledFor) ?? DBNull.Value);
+                command.Parameters.AddWithValue("$resumed", (object?)execution.ResumedFrom?.ToString("D") ?? DBNull.Value);
+                command.Parameters.AddWithValue("$recovery", (object?)execution.Recovery ?? DBNull.Value);
                 command.ExecuteNonQuery();
             }
 
@@ -171,6 +182,7 @@ public sealed class SqliteHistoryStore : IHistoryStore
         ArgumentNullException.ThrowIfNull(executionEvent);
         lock (_gate)
         {
+            ThrowIfDisposed();
             using var command = _connection.CreateCommand();
             command.CommandText = """
                 INSERT INTO execution_events (execution_id, workflow_id, step_id, at_utc, severity, event_type, message, duration_ms)
@@ -188,7 +200,7 @@ public sealed class SqliteHistoryStore : IHistoryStore
         }
     }
 
-    public int MarkInterrupted(DateTimeOffset now)
+    public IReadOnlyList<Guid> MarkInterrupted(DateTimeOffset now)
     {
         lock (_gate)
         {
@@ -199,7 +211,7 @@ public sealed class SqliteHistoryStore : IHistoryStore
             using (var select = _connection.CreateCommand())
             {
                 select.Transaction = transaction;
-                select.CommandText = "SELECT id, workflow_id FROM executions WHERE status IN ('Queued', 'Running', 'Cancelling');";
+                select.CommandText = "SELECT id, workflow_id FROM executions WHERE status IN ('Queued', 'Running', 'Cancelling') ORDER BY queued_at, rowid;";
                 using var reader = select.ExecuteReader();
                 while (reader.Read())
                 {
@@ -221,9 +233,10 @@ public sealed class SqliteHistoryStore : IHistoryStore
                 using (var execution = _connection.CreateCommand())
                 {
                     execution.Transaction = transaction;
-                    execution.CommandText = "UPDATE executions SET status = 'Interrupted', finished_at = $now, error = COALESCE(error, 'The app stopped while this run was active.') WHERE id = $id;";
+                    execution.CommandText = "UPDATE executions SET status = 'Interrupted', finished_at = $now, recovery = $recovery, error = COALESCE(error, 'The app stopped while this run was active.') WHERE id = $id;";
                     execution.Parameters.AddWithValue("$now", stamp);
                     execution.Parameters.AddWithValue("$id", id);
+                    execution.Parameters.AddWithValue("$recovery", RecoveryStates.Pending);
                     execution.ExecuteNonQuery();
                 }
 
@@ -242,7 +255,47 @@ public sealed class SqliteHistoryStore : IHistoryStore
             }
 
             transaction.Commit();
-            return ids.Count;
+            return ids.Select(i => Guid.Parse(i.Id)).ToList();
+        }
+    }
+
+    public void SetRecovery(Guid executionId, ExecutionStatus status, string recovery, string explanation, DateTimeOffset now)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(recovery);
+        ArgumentNullException.ThrowIfNull(explanation);
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            using var transaction = _connection.BeginTransaction();
+            string workflowId;
+            using (var update = _connection.CreateCommand())
+            {
+                update.Transaction = transaction;
+                update.CommandText = "UPDATE executions SET status = $status, recovery = $recovery, error = $error WHERE id = $id RETURNING workflow_id;";
+                update.Parameters.AddWithValue("$status", status.ToString());
+                update.Parameters.AddWithValue("$recovery", recovery);
+                update.Parameters.AddWithValue("$error", explanation);
+                update.Parameters.AddWithValue("$id", executionId.ToString("D"));
+                workflowId = update.ExecuteScalar() as string ?? throw new KeyNotFoundException($"Unknown execution {executionId}.");
+            }
+
+            using (var evt = _connection.CreateCommand())
+            {
+                evt.Transaction = transaction;
+                evt.CommandText = """
+                    INSERT INTO execution_events (execution_id, workflow_id, step_id, at_utc, severity, event_type, message, duration_ms)
+                    VALUES ($id, $workflow, NULL, $now, $severity, $type, $message, NULL);
+                    """;
+                evt.Parameters.AddWithValue("$id", executionId.ToString("D"));
+                evt.Parameters.AddWithValue("$workflow", workflowId);
+                evt.Parameters.AddWithValue("$now", Format(now));
+                evt.Parameters.AddWithValue("$severity", status == ExecutionStatus.NeedsAttention ? EventSeverity.Error.ToString() : EventSeverity.Warning.ToString());
+                evt.Parameters.AddWithValue("$type", $"recovery.{recovery}");
+                evt.Parameters.AddWithValue("$message", OutputRedactor.Redact(explanation) ?? string.Empty);
+                evt.ExecuteNonQuery();
+            }
+
+            transaction.Commit();
         }
     }
 
@@ -255,8 +308,8 @@ public sealed class SqliteHistoryStore : IHistoryStore
             using (var command = _connection.CreateCommand())
             {
                 command.CommandText = profile is null
-                    ? "SELECT id, profile_id, workflow_id, workflow_name, status, queued_at, started_at, finished_at, error FROM executions ORDER BY queued_at DESC, rowid DESC LIMIT $limit;"
-                    : "SELECT id, profile_id, workflow_id, workflow_name, status, queued_at, started_at, finished_at, error FROM executions WHERE profile_id = $profile ORDER BY queued_at DESC, rowid DESC LIMIT $limit;";
+                    ? $"SELECT {ExecutionColumns} FROM executions ORDER BY queued_at DESC, rowid DESC LIMIT $limit;"
+                    : $"SELECT {ExecutionColumns} FROM executions WHERE profile_id = $profile ORDER BY queued_at DESC, rowid DESC LIMIT $limit;";
                 command.Parameters.AddWithValue("$limit", limit);
                 if (profile is not null)
                 {
@@ -274,12 +327,34 @@ public sealed class SqliteHistoryStore : IHistoryStore
         }
     }
 
+    public IReadOnlyList<ExecutionSnapshot> GetExecutionsByStatus(ExecutionStatus status, int limit)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
+        lock (_gate)
+        {
+            var executions = new List<ExecutionSnapshot>();
+            using (var command = _connection.CreateCommand())
+            {
+                command.CommandText = $"SELECT {ExecutionColumns} FROM executions WHERE status = $status ORDER BY queued_at DESC, rowid DESC LIMIT $limit;";
+                command.Parameters.AddWithValue("$status", status.ToString());
+                command.Parameters.AddWithValue("$limit", limit);
+                using var reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    executions.Add(ReadExecution(reader, []));
+                }
+            }
+
+            return executions.Select(e => e with { Steps = ReadSteps(e.Id) }).ToList();
+        }
+    }
+
     public ExecutionSnapshot? GetExecution(Guid executionId)
     {
         lock (_gate)
         {
             using var command = _connection.CreateCommand();
-            command.CommandText = "SELECT id, profile_id, workflow_id, workflow_name, status, queued_at, started_at, finished_at, error FROM executions WHERE id = $id;";
+            command.CommandText = $"SELECT {ExecutionColumns} FROM executions WHERE id = $id;";
             command.Parameters.AddWithValue("$id", executionId.ToString("D"));
             using var reader = command.ExecuteReader();
             if (!reader.Read())
@@ -320,6 +395,81 @@ public sealed class SqliteHistoryStore : IHistoryStore
         }
     }
 
+    public IReadOnlyList<TriggerRecord> GetTriggers()
+    {
+        lock (_gate)
+        {
+            using var command = _connection.CreateCommand();
+            command.CommandText = $"SELECT {TriggerColumns} FROM triggers ORDER BY id;";
+            using var reader = command.ExecuteReader();
+            var triggers = new List<TriggerRecord>();
+            while (reader.Read())
+            {
+                triggers.Add(ReadTrigger(reader));
+            }
+
+            return triggers;
+        }
+    }
+
+    public TriggerRecord? GetTrigger(string triggerId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(triggerId);
+        lock (_gate)
+        {
+            using var command = _connection.CreateCommand();
+            command.CommandText = $"SELECT {TriggerColumns} FROM triggers WHERE id = $id;";
+            command.Parameters.AddWithValue("$id", triggerId);
+            using var reader = command.ExecuteReader();
+            return reader.Read() ? ReadTrigger(reader) : null;
+        }
+    }
+
+    public void UpsertTrigger(TriggerRecord trigger)
+    {
+        ArgumentNullException.ThrowIfNull(trigger);
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            using var command = _connection.CreateCommand();
+            command.CommandText = """
+                INSERT INTO triggers (id, profile_id, workflow_id, type, enabled, config_json, config_hash, next_due_at, last_fired_for, last_fired_at, last_outcome, updated_at)
+                VALUES ($id, $profile, $workflow, $type, $enabled, $config, $hash, $next, $firedFor, $firedAt, $outcome, $updated)
+                ON CONFLICT (id) DO UPDATE SET
+                    profile_id = excluded.profile_id, workflow_id = excluded.workflow_id, type = excluded.type, enabled = excluded.enabled,
+                    config_json = excluded.config_json, config_hash = excluded.config_hash, next_due_at = excluded.next_due_at,
+                    last_fired_for = excluded.last_fired_for, last_fired_at = excluded.last_fired_at, last_outcome = excluded.last_outcome,
+                    updated_at = excluded.updated_at;
+                """;
+            command.Parameters.AddWithValue("$id", trigger.Id);
+            command.Parameters.AddWithValue("$profile", trigger.Profile.ToJsonValue());
+            command.Parameters.AddWithValue("$workflow", trigger.WorkflowId);
+            command.Parameters.AddWithValue("$type", trigger.Type);
+            command.Parameters.AddWithValue("$enabled", trigger.Enabled ? 1 : 0);
+            command.Parameters.AddWithValue("$config", trigger.ConfigJson);
+            command.Parameters.AddWithValue("$hash", trigger.ConfigHash);
+            command.Parameters.AddWithValue("$next", (object?)Format(trigger.NextDueAt) ?? DBNull.Value);
+            command.Parameters.AddWithValue("$firedFor", (object?)Format(trigger.LastFiredFor) ?? DBNull.Value);
+            command.Parameters.AddWithValue("$firedAt", (object?)Format(trigger.LastFiredAt) ?? DBNull.Value);
+            command.Parameters.AddWithValue("$outcome", (object?)trigger.LastOutcome ?? DBNull.Value);
+            command.Parameters.AddWithValue("$updated", Format(trigger.UpdatedAt));
+            command.ExecuteNonQuery();
+        }
+    }
+
+    public void DeleteTrigger(string triggerId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(triggerId);
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            using var command = _connection.CreateCommand();
+            command.CommandText = "DELETE FROM triggers WHERE id = $id;";
+            command.Parameters.AddWithValue("$id", triggerId);
+            command.ExecuteNonQuery();
+        }
+    }
+
     public string? GetSetting(string key)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
@@ -338,6 +488,7 @@ public sealed class SqliteHistoryStore : IHistoryStore
         ArgumentNullException.ThrowIfNull(value);
         lock (_gate)
         {
+            ThrowIfDisposed();
             using var command = _connection.CreateCommand();
             command.CommandText = """
                 INSERT INTO settings (key, value, updated_at) VALUES ($key, $value, $now)
@@ -381,6 +532,8 @@ public sealed class SqliteHistoryStore : IHistoryStore
             _connection.Dispose();
         }
     }
+
+    private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
 
     private static int Migrate(SqliteConnection connection)
     {
@@ -453,7 +606,27 @@ public sealed class SqliteHistoryStore : IHistoryStore
             reader.IsDBNull(6) ? null : Parse(reader.GetString(6)),
             reader.IsDBNull(7) ? null : Parse(reader.GetString(7)),
             reader.IsDBNull(8) ? null : reader.GetString(8),
-            steps);
+            steps,
+            reader.GetString(9),
+            reader.GetString(10),
+            reader.IsDBNull(11) ? null : Parse(reader.GetString(11)),
+            reader.IsDBNull(12) ? null : Guid.Parse(reader.GetString(12)),
+            reader.IsDBNull(13) ? null : reader.GetString(13));
+
+    private static TriggerRecord ReadTrigger(SqliteDataReader reader) =>
+        new(
+            reader.GetString(0),
+            ProfileIdExtensions.TryParseJsonValue(reader.GetString(1), out var profile) ? profile : ProfileId.Personal,
+            reader.GetString(2),
+            reader.GetString(3),
+            reader.GetInt32(4) != 0,
+            reader.GetString(5),
+            reader.GetString(6),
+            reader.IsDBNull(7) ? null : Parse(reader.GetString(7)),
+            reader.IsDBNull(8) ? null : Parse(reader.GetString(8)),
+            reader.IsDBNull(9) ? null : Parse(reader.GetString(9)),
+            reader.IsDBNull(10) ? null : reader.GetString(10),
+            Parse(reader.GetString(11)));
 
     private List<StepSnapshot> ReadSteps(Guid executionId)
     {

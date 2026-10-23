@@ -89,6 +89,23 @@ public static class Migrations
                 updated_at      TEXT NOT NULL
             );
             """),
+
+        // Phase 4 (ADR-034, ADR-035): scheduler state on triggers; provenance and recovery bookkeeping on executions.
+        // Additive only (ALTER TABLE ... ADD COLUMN with defaults), so a v1 database and its rows survive untouched.
+        new Migration(2, "scheduler-and-recovery", """
+            ALTER TABLE executions ADD COLUMN workflow_hash  TEXT NOT NULL DEFAULT '';
+            ALTER TABLE executions ADD COLUMN trigger_source TEXT NOT NULL DEFAULT 'manual';
+            ALTER TABLE executions ADD COLUMN scheduled_for  TEXT;
+            ALTER TABLE executions ADD COLUMN resumed_from   TEXT;
+            ALTER TABLE executions ADD COLUMN recovery       TEXT;
+            CREATE INDEX ix_executions_status ON executions (status);
+
+            ALTER TABLE triggers ADD COLUMN config_hash    TEXT NOT NULL DEFAULT '';
+            ALTER TABLE triggers ADD COLUMN next_due_at    TEXT;
+            ALTER TABLE triggers ADD COLUMN last_fired_for TEXT;
+            ALTER TABLE triggers ADD COLUMN last_fired_at  TEXT;
+            ALTER TABLE triggers ADD COLUMN last_outcome   TEXT;
+            """),
     ];
 
     /// <summary>The version a freshly migrated database ends at.</summary>
