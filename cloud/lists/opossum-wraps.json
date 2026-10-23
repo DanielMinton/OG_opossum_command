@@ -1,0 +1,221 @@
+{
+  "title": "Opossum Wraps",
+  "description": "One row per working day, added by the 4:30 Wrap flow (weekdays 16:30 Pacific) alongside its Teams message and tomorrow.json. The Hub's Day screen reads it. Rows older than 1 year (by Date) are deleted by the monthly cleanup flow.",
+  "site": "__SITE_URL__",
+  "sourceFiles": ["tomorrow.json", "Microsoft To Do (Business) tasks read by the 4:30 Wrap flow"],
+  "rowKey": "Date (unique, date only). The 4:30 Wrap looks the day up with $filter=Date eq '<yyyy-MM-dd>' and patches the row if a re-run finds one, otherwise creates it.",
+  "retention": "1 year by Date. The Alerts cleanup flow (monthly) deletes rows with Date lt addDays(today, -365).",
+  "columns": [
+    {
+      "internalName": "Title",
+      "displayName": "Title",
+      "type": "Text",
+      "required": true,
+      "indexed": false,
+      "enforceUnique": false,
+      "builtIn": true,
+      "source": "the wrapped day as text, convertFromUtc(utcNow(), 'Pacific Standard Time', 'yyyy-MM-dd') (display only)"
+    },
+    {
+      "internalName": "Date",
+      "displayName": "Date",
+      "type": "DateTime",
+      "dateFormat": "DateOnly",
+      "required": true,
+      "indexed": true,
+      "enforceUnique": true,
+      "source": "the day being wrapped: convertFromUtc(utcNow(), 'Pacific Standard Time', 'yyyy-MM-dd') at the 4:30 run. Not tomorrow.json forDate (that is the next working day; see ForDate)."
+    },
+    {
+      "internalName": "Done",
+      "displayName": "Done",
+      "type": "Number",
+      "decimals": 0,
+      "min": 0,
+      "required": true,
+      "indexed": false,
+      "enforceUnique": false,
+      "source": "4:30 Wrap: count of To Do tasks with status 'completed' whose completedDateTime falls on today's Pacific date (not in any app file)"
+    },
+    {
+      "internalName": "Open",
+      "displayName": "Open",
+      "type": "Number",
+      "decimals": 0,
+      "min": 0,
+      "required": true,
+      "indexed": false,
+      "enforceUnique": false,
+      "source": "4:30 Wrap: count of To Do tasks whose status is not 'completed' (the same Filter array that feeds tomorrow.json items, before take(…, 10))"
+    },
+    {
+      "internalName": "Overdue",
+      "displayName": "Overdue",
+      "type": "Number",
+      "decimals": 0,
+      "min": 0,
+      "required": true,
+      "indexed": false,
+      "enforceUnique": false,
+      "source": "4:30 Wrap: open To Do tasks whose dueDateTime date is before today's Pacific date"
+    },
+    {
+      "internalName": "Waiting",
+      "displayName": "Waiting",
+      "type": "Number",
+      "decimals": 0,
+      "min": 0,
+      "required": true,
+      "indexed": false,
+      "enforceUnique": false,
+      "source": "4:30 Wrap: open To Do tasks with status 'waitingOnOthers'"
+    },
+    {
+      "internalName": "ForDate",
+      "displayName": "For date",
+      "type": "DateTime",
+      "dateFormat": "DateOnly",
+      "required": false,
+      "indexed": false,
+      "enforceUnique": false,
+      "source": "tomorrow.json forDate (next working day; Friday -> Monday). Added beyond the blueprint."
+    },
+    {
+      "internalName": "TomorrowCount",
+      "displayName": "Carryover count",
+      "type": "Number",
+      "decimals": 0,
+      "min": 0,
+      "required": false,
+      "indexed": false,
+      "enforceUnique": false,
+      "source": "length(tomorrow.json items) (0–10). Added beyond the blueprint."
+    },
+    {
+      "internalName": "Tomorrow",
+      "displayName": "Tomorrow",
+      "type": "Note",
+      "numLines": 6,
+      "richText": false,
+      "required": false,
+      "indexed": false,
+      "enforceUnique": false,
+      "source": "tomorrow.json items: one line per item, title (plus ' (due yyyy-MM-dd)' when due is set), joined with a line break; at most 10 items × 200 characters"
+    },
+    {
+      "internalName": "Summary",
+      "displayName": "Summary",
+      "type": "Note",
+      "numLines": 6,
+      "richText": false,
+      "required": false,
+      "indexed": false,
+      "enforceUnique": false,
+      "source": "the text of the Teams wrap message the 4:30 Wrap posted (plain text, take(…, 63000))"
+    }
+  ],
+  "views": [
+    {
+      "title": "All Items",
+      "default": true,
+      "fields": ["Title", "Date", "Done", "Open", "Overdue", "Waiting", "TomorrowCount", "Summary"],
+      "note": "Columns are added to the default view by CreateFieldAsXml option 16; ForDate and Tomorrow are created without it. Sorting newest first is done in the Hub."
+    }
+  ],
+  "spRestDefaultHeaders": {
+    "Accept": "application/json;odata=verbose",
+    "Content-Type": "application/json;odata=verbose"
+  },
+  "spRestCreate": [
+    {
+      "step": "create list",
+      "method": "POST",
+      "uri": "_api/web/lists",
+      "body": {
+        "__metadata": { "type": "SP.List" },
+        "BaseTemplate": 100,
+        "Title": "Opossum Wraps",
+        "Description": "OG Opossum Command Central: one 4:30 wrap per working day. Kept 1 year.",
+        "AllowContentTypes": true,
+        "ContentTypesEnabled": false
+      }
+    },
+    {
+      "step": "field Date",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Wraps')/fields/CreateFieldAsXml",
+      "body": { "parameters": { "__metadata": { "type": "SP.XmlSchemaFieldCreationInformation" }, "Options": 24,
+        "SchemaXml": "<Field Type='DateTime' Name='Date' StaticName='Date' DisplayName='Date' Required='TRUE' Format='DateOnly' />" } }
+    },
+    {
+      "step": "field Done",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Wraps')/fields/CreateFieldAsXml",
+      "body": { "parameters": { "__metadata": { "type": "SP.XmlSchemaFieldCreationInformation" }, "Options": 24,
+        "SchemaXml": "<Field Type='Number' Name='Done' StaticName='Done' DisplayName='Done' Required='TRUE' Decimals='0' Min='0'><Default>0</Default></Field>" } }
+    },
+    {
+      "step": "field Open",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Wraps')/fields/CreateFieldAsXml",
+      "body": { "parameters": { "__metadata": { "type": "SP.XmlSchemaFieldCreationInformation" }, "Options": 24,
+        "SchemaXml": "<Field Type='Number' Name='Open' StaticName='Open' DisplayName='Open' Required='TRUE' Decimals='0' Min='0'><Default>0</Default></Field>" } }
+    },
+    {
+      "step": "field Overdue",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Wraps')/fields/CreateFieldAsXml",
+      "body": { "parameters": { "__metadata": { "type": "SP.XmlSchemaFieldCreationInformation" }, "Options": 24,
+        "SchemaXml": "<Field Type='Number' Name='Overdue' StaticName='Overdue' DisplayName='Overdue' Required='TRUE' Decimals='0' Min='0'><Default>0</Default></Field>" } }
+    },
+    {
+      "step": "field Waiting",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Wraps')/fields/CreateFieldAsXml",
+      "body": { "parameters": { "__metadata": { "type": "SP.XmlSchemaFieldCreationInformation" }, "Options": 24,
+        "SchemaXml": "<Field Type='Number' Name='Waiting' StaticName='Waiting' DisplayName='Waiting' Required='TRUE' Decimals='0' Min='0'><Default>0</Default></Field>" } }
+    },
+    {
+      "step": "field ForDate",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Wraps')/fields/CreateFieldAsXml",
+      "body": { "parameters": { "__metadata": { "type": "SP.XmlSchemaFieldCreationInformation" }, "Options": 8,
+        "SchemaXml": "<Field Type='DateTime' Name='ForDate' StaticName='ForDate' DisplayName='For date' Required='FALSE' Format='DateOnly' />" } }
+    },
+    {
+      "step": "field TomorrowCount",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Wraps')/fields/CreateFieldAsXml",
+      "body": { "parameters": { "__metadata": { "type": "SP.XmlSchemaFieldCreationInformation" }, "Options": 24,
+        "SchemaXml": "<Field Type='Number' Name='TomorrowCount' StaticName='TomorrowCount' DisplayName='Carryover count' Required='FALSE' Decimals='0' Min='0' Max='10' />" } }
+    },
+    {
+      "step": "field Tomorrow",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Wraps')/fields/CreateFieldAsXml",
+      "body": { "parameters": { "__metadata": { "type": "SP.XmlSchemaFieldCreationInformation" }, "Options": 8,
+        "SchemaXml": "<Field Type='Note' Name='Tomorrow' StaticName='Tomorrow' DisplayName='Tomorrow' Required='FALSE' NumLines='6' RichText='FALSE' AppendOnly='FALSE' />" } }
+    },
+    {
+      "step": "field Summary",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Wraps')/fields/CreateFieldAsXml",
+      "body": { "parameters": { "__metadata": { "type": "SP.XmlSchemaFieldCreationInformation" }, "Options": 24,
+        "SchemaXml": "<Field Type='Note' Name='Summary' StaticName='Summary' DisplayName='Summary' Required='FALSE' NumLines='6' RichText='FALSE' AppendOnly='FALSE' />" } }
+    },
+    {
+      "step": "index Date",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Wraps')/fields/getbyinternalnameortitle('Date')",
+      "headers": { "X-HTTP-Method": "MERGE", "IF-MATCH": "*" },
+      "body": { "__metadata": { "type": "SP.Field" }, "Indexed": true }
+    },
+    {
+      "step": "unique Date (after the index)",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Wraps')/fields/getbyinternalnameortitle('Date')",
+      "headers": { "X-HTTP-Method": "MERGE", "IF-MATCH": "*" },
+      "body": { "__metadata": { "type": "SP.Field" }, "EnforceUniqueValues": true }
+    }
+  ]
+}

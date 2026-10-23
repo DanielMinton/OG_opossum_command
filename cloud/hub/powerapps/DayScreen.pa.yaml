@@ -1,0 +1,291 @@
+# Opossum Hub - Day screen. The 4:30 wrap in the same lines as the Teams message, with history.
+# The Tomorrow line is what the desktop app shows in its Today panel the next morning (tomorrow.json).
+# Data: 'Opossum Wraps' (display names: Title, Date, Done, Open, Overdue, Waiting, 'For date',
+#   'Carryover count', Tomorrow, Summary). Read only: tap an earlier day to read its wrap.
+Screens:
+  DayScreen:
+    Properties:
+      Fill: =ColorValue("#f5f5f8")
+      OnVisible: |-
+        =Refresh('Opossum Wraps');
+        UpdateContext({locWrap: First(Sort('Opossum Wraps', ThisRecord.Date, SortOrder.Descending))})
+    Children:
+      - dayRoot:
+          Control: GroupContainer
+          Variant: AutoLayout
+          Properties:
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height
+            Fill: =ColorValue("#f5f5f8")
+            DropShadow: =DropShadow.None
+            LayoutDirection: =LayoutDirection.Vertical
+            LayoutAlignItems: =LayoutAlignItems.Stretch
+            LayoutGap: =0
+          Children:
+            - dayHeader:
+                Control: GroupContainer
+                Variant: AutoLayout
+                Properties:
+                  Height: =56
+                  FillPortions: =0
+                  Fill: =ColorValue("#ffffff")
+                  BorderColor: =ColorValue("#e2e2ea")
+                  BorderThickness: =1
+                  DropShadow: =DropShadow.None
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutAlignItems: =LayoutAlignItems.Center
+                  LayoutGap: =8
+                  PaddingLeft: =16
+                  PaddingRight: =8
+                Children:
+                  - dayTitle:
+                      Control: ModernText@1.0.0
+                      Properties:
+                        Text: |-
+                          =If(IsBlank(locWrap), "Day", Text(locWrap.Date, "dddd") & " wrap")
+                        Size: =20
+                        FontWeight: =FontWeight.Semibold
+                        Color: =ColorValue("#15151c")
+                        FillPortions: =1
+                        Height: =40
+                  - dayDate:
+                      Control: ModernText@1.0.0
+                      Properties:
+                        Text: =If(IsBlank(locWrap), "", Text(locWrap.Date, "mmm d") & " · 4:30")
+                        Size: =13
+                        Align: =Align.Right
+                        Color: =ColorValue("#5d5e6e")
+                        Width: =110
+                        Height: =32
+            - dayBody:
+                Control: GroupContainer
+                Variant: AutoLayout
+                Properties:
+                  FillPortions: =1
+                  Fill: =ColorValue("#f5f5f8")
+                  DropShadow: =DropShadow.None
+                  LayoutDirection: =LayoutDirection.Vertical
+                  LayoutAlignItems: =LayoutAlignItems.Stretch
+                  LayoutOverflowY: =LayoutOverflow.Scroll
+                  LayoutGap: =10
+                  PaddingTop: =16
+                  PaddingBottom: =16
+                  PaddingLeft: =16
+                  PaddingRight: =16
+                Children:
+                  - dayEmpty:
+                      Control: ModernText@1.0.0
+                      Properties:
+                        Visible: =IsBlank(locWrap)
+                        Text: ="No wrap yet. The 4:30 Wrap flow adds one each weekday."
+                        Size: =13
+                        Wrap: =true
+                        Color: =ColorValue("#5d5e6e")
+                        Height: =48
+                  - dayCard:
+                      Control: GroupContainer
+                      Variant: AutoLayout
+                      Properties:
+                        Visible: =!IsBlank(locWrap)
+                        Height: =230
+                        FillPortions: =0
+                        Fill: =ColorValue("#ffffff")
+                        BorderColor: =ColorValue("#e2e2ea")
+                        BorderThickness: =1
+                        RadiusTopLeft: =12
+                        RadiusTopRight: =12
+                        RadiusBottomLeft: =12
+                        RadiusBottomRight: =12
+                        DropShadow: =DropShadow.None
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutAlignItems: =LayoutAlignItems.Stretch
+                        LayoutGap: =6
+                        PaddingTop: =12
+                        PaddingBottom: =12
+                        PaddingLeft: =14
+                        PaddingRight: =14
+                      Children:
+                        - dayDone:
+                            Control: ModernText@1.0.0
+                            Properties:
+                              Text: |-
+                                ="Done: " & Coalesce(locWrap.Done, 0) & If(Coalesce(locWrap.Done, 0) = 1, " ask closed", " asks closed")
+                              Size: =14
+                              Color: =ColorValue("#1f7a48")
+                              Height: =28
+                        - dayOpen:
+                            Control: ModernText@1.0.0
+                            Properties:
+                              Text: |-
+                                ="Open: " & Coalesce(locWrap.Open, 0) & If(Coalesce(locWrap.Waiting, 0) > 0, ", " & locWrap.Waiting & " waiting on others", "")
+                              Size: =14
+                              Color: =ColorValue("#15151c")
+                              Height: =28
+                        - dayOverdue:
+                            Control: ModernText@1.0.0
+                            Properties:
+                              Text: |-
+                                ="Overdue: " & Coalesce(locWrap.Overdue, 0)
+                              Size: =14
+                              Color: =If(Coalesce(locWrap.Overdue, 0) > 0, ColorValue("#c22f48"), ColorValue("#15151c"))
+                              Height: =28
+                        - dayWaiting:
+                            Control: ModernText@1.0.0
+                            Properties:
+                              Text: |-
+                                ="Waiting: " & Coalesce(locWrap.Waiting, 0)
+                              Size: =14
+                              Color: =If(Coalesce(locWrap.Waiting, 0) > 0, ColorValue("#a85a00"), ColorValue("#15151c"))
+                              Height: =28
+                        - dayTomorrowHead:
+                            Control: ModernText@1.0.0
+                            Properties:
+                              Text: |-
+                                ="Tomorrow" & If(IsBlank(locWrap.'For date'), "", " (" & Text(locWrap.'For date', "ddd mmm d") & ")")
+                              Size: =14
+                              FontWeight: =FontWeight.Semibold
+                              Color: =ColorValue("#5457c4")
+                              Height: =28
+                        - dayTomorrow:
+                            Control: ModernText@1.0.0
+                            Properties:
+                              Text: =Coalesce(locWrap.Tomorrow, "Nothing carried over.")
+                              Size: =13
+                              Wrap: =true
+                              VerticalAlign: =VerticalAlign.Top
+                              Color: =ColorValue("#15151c")
+                              FillPortions: =1
+                  - daySummaryHead:
+                      Control: ModernText@1.0.0
+                      Properties:
+                        Visible: =!IsBlank(locWrap.Summary)
+                        Text: ="The Teams message"
+                        Size: =14
+                        FontWeight: =FontWeight.Semibold
+                        Color: =ColorValue("#15151c")
+                        Height: =28
+                  - daySummary:
+                      Control: ModernText@1.0.0
+                      Properties:
+                        Visible: =!IsBlank(locWrap.Summary)
+                        Text: =locWrap.Summary
+                        Size: =13
+                        Wrap: =true
+                        AutoHeight: =true
+                        Color: =ColorValue("#15151c")
+                        Fill: =ColorValue("#ffffff")
+                        BorderColor: =ColorValue("#e2e2ea")
+                        BorderThickness: =1
+                        RadiusTopLeft: =12
+                        RadiusTopRight: =12
+                        RadiusBottomLeft: =12
+                        RadiusBottomRight: =12
+                        PaddingTop: =10
+                        PaddingBottom: =10
+                        PaddingLeft: =12
+                        PaddingRight: =12
+                  - dayEarlierHead:
+                      Control: ModernText@1.0.0
+                      Properties:
+                        Text: ="Earlier days"
+                        Size: =14
+                        FontWeight: =FontWeight.Semibold
+                        Color: =ColorValue("#15151c")
+                        Height: =28
+                  - dayEarlier:
+                      Control: Gallery
+                      Variant: Vertical
+                      Properties:
+                        Items: =FirstN(Sort('Opossum Wraps', ThisRecord.Date, SortOrder.Descending), 30)
+                        TemplateSize: =48
+                        TemplatePadding: =0
+                        Height: =Min(CountRows(Self.AllItems), 10) * 48
+                        FillPortions: =0
+                        Fill: =ColorValue("#ffffff")
+                        BorderColor: =ColorValue("#e2e2ea")
+                        BorderThickness: =1
+                        ShowScrollbar: =true
+                        OnSelect: |-
+                          =UpdateContext({locWrap: ThisItem})
+                      Children:
+                        - dayEarlierDate:
+                            Control: ModernText@1.0.0
+                            Properties:
+                              Text: =Text(ThisItem.Date, "ddd mmm d")
+                              Size: =14
+                              FontWeight: =If(ThisItem.ID = locWrap.ID, FontWeight.Semibold, FontWeight.Normal)
+                              Color: =If(ThisItem.ID = locWrap.ID, ColorValue("#5457c4"), ColorValue("#15151c"))
+                              X: =12
+                              Y: =0
+                              Width: =(Parent.TemplateWidth - 24) / 2
+                              Height: =Parent.TemplateHeight
+                              OnSelect: |-
+                                =UpdateContext({locWrap: ThisItem})
+                        - dayEarlierCounts:
+                            Control: ModernText@1.0.0
+                            Properties:
+                              Text: =Coalesce(ThisItem.Done, 0) & " done · " & Coalesce(ThisItem.Open, 0) & " open"
+                              Size: =13
+                              Align: =Align.Right
+                              Color: =ColorValue("#5d5e6e")
+                              X: =12 + (Parent.TemplateWidth - 24) / 2
+                              Y: =0
+                              Width: =(Parent.TemplateWidth - 24) / 2
+                              Height: =Parent.TemplateHeight
+                              OnSelect: |-
+                                =UpdateContext({locWrap: ThisItem})
+            - dayNav:
+                Control: GroupContainer
+                Variant: AutoLayout
+                Properties:
+                  Height: =60
+                  FillPortions: =0
+                  Fill: =ColorValue("#ffffff")
+                  BorderColor: =ColorValue("#e2e2ea")
+                  BorderThickness: =1
+                  DropShadow: =DropShadow.None
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutAlignItems: =LayoutAlignItems.Center
+                  LayoutGap: =4
+                  PaddingLeft: =8
+                  PaddingRight: =8
+                Children:
+                  - dayNavNow:
+                      Control: ModernButton@1.0.0
+                      Properties:
+                        Text: ="Now"
+                        Appearance: =ButtonAppearance.Subtle
+                        BasePaletteColor: =ColorValue("#5457c4")
+                        FillPortions: =1
+                        Height: =40
+                        OnSelect: =Navigate(NowScreen)
+                  - dayNavAlerts:
+                      Control: ModernButton@1.0.0
+                      Properties:
+                        Text: |-
+                          =With({n: CountRows(Filter('Opossum Alerts', State.Value = "New"))}, "Alerts" & If(n > 0, " " & n, ""))
+                        Appearance: =ButtonAppearance.Subtle
+                        BasePaletteColor: =ColorValue("#5457c4")
+                        FillPortions: =1
+                        Height: =40
+                        OnSelect: =Navigate(AlertsScreen)
+                  - dayNavAsks:
+                      Control: ModernButton@1.0.0
+                      Properties:
+                        Text: ="Asks"
+                        Appearance: =ButtonAppearance.Subtle
+                        BasePaletteColor: =ColorValue("#5457c4")
+                        FillPortions: =1
+                        Height: =40
+                        OnSelect: =Navigate(AsksScreen)
+                  - dayNavDay:
+                      Control: ModernButton@1.0.0
+                      Properties:
+                        Text: ="Day"
+                        Appearance: =ButtonAppearance.Primary
+                        BasePaletteColor: =ColorValue("#5457c4")
+                        FillPortions: =1
+                        Height: =40
+                        OnSelect: =Navigate(DayScreen)

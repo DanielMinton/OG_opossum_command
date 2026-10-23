@@ -1,0 +1,255 @@
+{
+  "title": "Opossum Snapshot",
+  "description": "One row, overwritten by the Status sync flow every time OG_opossum_command/status.json changes. The Hub's Now screen and the Morning Briefing read it. Holds only what status.json carries (scrubbed by the app), never step output, paths or links.",
+  "site": "__SITE_URL__",
+  "sourceFiles": ["status.json"],
+  "rowKey": "Title = 'status' (exactly one row; Status sync gets it with $filter=Title eq 'status', creates it on the first run, patches it afterwards)",
+  "removedColumns": "Carryovers (in the blueprint) is not created: it is not in status.json, and the Hub shows carryovers from the latest 'Opossum Wraps' row (TomorrowCount / Tomorrow), which the 4:30 Wrap writes together with tomorrow.json.",
+  "retention": "Single row, overwritten in place. Versioning is off so the 15-minute rewrites do not pile up versions.",
+  "columns": [
+    {
+      "internalName": "Title",
+      "displayName": "Title",
+      "type": "Text",
+      "required": true,
+      "indexed": true,
+      "enforceUnique": true,
+      "builtIn": true,
+      "source": "constant 'status' (row key, not from the file)"
+    },
+    {
+      "internalName": "Profile",
+      "displayName": "Profile",
+      "type": "Text",
+      "required": false,
+      "indexed": false,
+      "enforceUnique": false,
+      "maxLength": 50,
+      "source": "status.json profile"
+    },
+    {
+      "internalName": "GeneratedAt",
+      "displayName": "Generated at",
+      "type": "DateTime",
+      "dateFormat": "DateTime",
+      "required": true,
+      "indexed": false,
+      "enforceUnique": false,
+      "source": "status.json generatedAt (local time with offset; SharePoint stores the instant in UTC)"
+    },
+    {
+      "internalName": "AppVersion",
+      "displayName": "App version",
+      "type": "Text",
+      "required": false,
+      "indexed": false,
+      "enforceUnique": false,
+      "maxLength": 50,
+      "source": "status.json appVersion"
+    },
+    {
+      "internalName": "CompletedToday",
+      "displayName": "Completed today",
+      "type": "Number",
+      "decimals": 0,
+      "min": 0,
+      "required": true,
+      "indexed": false,
+      "enforceUnique": false,
+      "source": "status.json completedToday"
+    },
+    {
+      "internalName": "FailedCount",
+      "displayName": "Failed (24 h)",
+      "type": "Number",
+      "decimals": 0,
+      "min": 0,
+      "required": true,
+      "indexed": false,
+      "enforceUnique": false,
+      "source": "length(status.json failed) (runs failed since failedSince; the app caps the array at 20)"
+    },
+    {
+      "internalName": "FailedSince",
+      "displayName": "Failed since",
+      "type": "DateTime",
+      "dateFormat": "DateTime",
+      "required": false,
+      "indexed": false,
+      "enforceUnique": false,
+      "source": "status.json failedSince"
+    },
+    {
+      "internalName": "NeedsAttentionCount",
+      "displayName": "Needs attention",
+      "type": "Number",
+      "decimals": 0,
+      "min": 0,
+      "required": true,
+      "indexed": false,
+      "enforceUnique": false,
+      "source": "length(status.json needsAttention) (the app caps the array at 50)"
+    },
+    {
+      "internalName": "RunningNow",
+      "displayName": "Running now",
+      "type": "Number",
+      "decimals": 0,
+      "min": 0,
+      "required": true,
+      "indexed": false,
+      "enforceUnique": false,
+      "source": "length(status.json runningNow) (a count; the array itself stays in RawJson)"
+    },
+    {
+      "internalName": "NextScheduled",
+      "displayName": "Next scheduled",
+      "type": "DateTime",
+      "dateFormat": "DateTime",
+      "required": false,
+      "indexed": false,
+      "enforceUnique": false,
+      "source": "first(status.json scheduledToday)?['at'] (the app sorts scheduledToday by time; empty array -> null)"
+    },
+    {
+      "internalName": "NextScheduledName",
+      "displayName": "Next scheduled workflow",
+      "type": "Text",
+      "required": false,
+      "indexed": false,
+      "enforceUnique": false,
+      "maxLength": 255,
+      "source": "first(status.json scheduledToday)?['workflowName'] (empty array -> empty)"
+    },
+    {
+      "internalName": "RawJson",
+      "displayName": "Raw JSON",
+      "type": "Note",
+      "numLines": 6,
+      "richText": false,
+      "required": false,
+      "indexed": false,
+      "enforceUnique": false,
+      "source": "the whole status.json text as read (string of the Parse JSON input). Plain multi-line text holds at most 63,999 characters; status.json is normally far smaller. The flow writes the text unchanged when it is at most 63,000 characters and '' otherwise, never a truncated copy (Status sync parses the previous RawJson with json(), and a cut-off text would fail every later run)."
+    }
+  ],
+  "views": [
+    {
+      "title": "All Items",
+      "default": true,
+      "fields": ["Title", "GeneratedAt", "CompletedToday", "FailedCount", "NeedsAttentionCount", "RunningNow", "NextScheduled", "NextScheduledName", "AppVersion"],
+      "note": "Columns are added to the default view by CreateFieldAsXml option 16 (AddFieldToDefaultView); RawJson is created without it."
+    }
+  ],
+  "spRestDefaultHeaders": {
+    "Accept": "application/json;odata=verbose",
+    "Content-Type": "application/json;odata=verbose"
+  },
+  "spRestCreate": [
+    {
+      "step": "create list",
+      "method": "POST",
+      "uri": "_api/web/lists",
+      "body": {
+        "__metadata": { "type": "SP.List" },
+        "BaseTemplate": 100,
+        "Title": "Opossum Snapshot",
+        "Description": "OG Opossum Command Central: one row, overwritten from status.json by the Status sync flow.",
+        "AllowContentTypes": true,
+        "ContentTypesEnabled": false,
+        "EnableVersioning": false
+      }
+    },
+    {
+      "step": "field Profile",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Snapshot')/fields/CreateFieldAsXml",
+      "body": { "parameters": { "__metadata": { "type": "SP.XmlSchemaFieldCreationInformation" }, "Options": 24,
+        "SchemaXml": "<Field Type='Text' Name='Profile' StaticName='Profile' DisplayName='Profile' Required='FALSE' MaxLength='50' />" } }
+    },
+    {
+      "step": "field GeneratedAt",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Snapshot')/fields/CreateFieldAsXml",
+      "body": { "parameters": { "__metadata": { "type": "SP.XmlSchemaFieldCreationInformation" }, "Options": 24,
+        "SchemaXml": "<Field Type='DateTime' Name='GeneratedAt' StaticName='GeneratedAt' DisplayName='Generated at' Required='TRUE' Format='DateTime' />" } }
+    },
+    {
+      "step": "field AppVersion",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Snapshot')/fields/CreateFieldAsXml",
+      "body": { "parameters": { "__metadata": { "type": "SP.XmlSchemaFieldCreationInformation" }, "Options": 24,
+        "SchemaXml": "<Field Type='Text' Name='AppVersion' StaticName='AppVersion' DisplayName='App version' Required='FALSE' MaxLength='50' />" } }
+    },
+    {
+      "step": "field CompletedToday",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Snapshot')/fields/CreateFieldAsXml",
+      "body": { "parameters": { "__metadata": { "type": "SP.XmlSchemaFieldCreationInformation" }, "Options": 24,
+        "SchemaXml": "<Field Type='Number' Name='CompletedToday' StaticName='CompletedToday' DisplayName='Completed today' Required='TRUE' Decimals='0' Min='0'><Default>0</Default></Field>" } }
+    },
+    {
+      "step": "field FailedCount",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Snapshot')/fields/CreateFieldAsXml",
+      "body": { "parameters": { "__metadata": { "type": "SP.XmlSchemaFieldCreationInformation" }, "Options": 24,
+        "SchemaXml": "<Field Type='Number' Name='FailedCount' StaticName='FailedCount' DisplayName='Failed (24 h)' Required='TRUE' Decimals='0' Min='0'><Default>0</Default></Field>" } }
+    },
+    {
+      "step": "field FailedSince",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Snapshot')/fields/CreateFieldAsXml",
+      "body": { "parameters": { "__metadata": { "type": "SP.XmlSchemaFieldCreationInformation" }, "Options": 8,
+        "SchemaXml": "<Field Type='DateTime' Name='FailedSince' StaticName='FailedSince' DisplayName='Failed since' Required='FALSE' Format='DateTime' />" } }
+    },
+    {
+      "step": "field NeedsAttentionCount",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Snapshot')/fields/CreateFieldAsXml",
+      "body": { "parameters": { "__metadata": { "type": "SP.XmlSchemaFieldCreationInformation" }, "Options": 24,
+        "SchemaXml": "<Field Type='Number' Name='NeedsAttentionCount' StaticName='NeedsAttentionCount' DisplayName='Needs attention' Required='TRUE' Decimals='0' Min='0'><Default>0</Default></Field>" } }
+    },
+    {
+      "step": "field RunningNow",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Snapshot')/fields/CreateFieldAsXml",
+      "body": { "parameters": { "__metadata": { "type": "SP.XmlSchemaFieldCreationInformation" }, "Options": 24,
+        "SchemaXml": "<Field Type='Number' Name='RunningNow' StaticName='RunningNow' DisplayName='Running now' Required='TRUE' Decimals='0' Min='0'><Default>0</Default></Field>" } }
+    },
+    {
+      "step": "field NextScheduled",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Snapshot')/fields/CreateFieldAsXml",
+      "body": { "parameters": { "__metadata": { "type": "SP.XmlSchemaFieldCreationInformation" }, "Options": 24,
+        "SchemaXml": "<Field Type='DateTime' Name='NextScheduled' StaticName='NextScheduled' DisplayName='Next scheduled' Required='FALSE' Format='DateTime' />" } }
+    },
+    {
+      "step": "field NextScheduledName",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Snapshot')/fields/CreateFieldAsXml",
+      "body": { "parameters": { "__metadata": { "type": "SP.XmlSchemaFieldCreationInformation" }, "Options": 24,
+        "SchemaXml": "<Field Type='Text' Name='NextScheduledName' StaticName='NextScheduledName' DisplayName='Next scheduled workflow' Required='FALSE' MaxLength='255' />" } }
+    },
+    {
+      "step": "field RawJson",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Snapshot')/fields/CreateFieldAsXml",
+      "body": { "parameters": { "__metadata": { "type": "SP.XmlSchemaFieldCreationInformation" }, "Options": 8,
+        "SchemaXml": "<Field Type='Note' Name='RawJson' StaticName='RawJson' DisplayName='Raw JSON' Required='FALSE' NumLines='6' RichText='FALSE' AppendOnly='FALSE' />" } }
+    },
+    {
+      "step": "index Title",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Snapshot')/fields/getbyinternalnameortitle('Title')",
+      "headers": { "X-HTTP-Method": "MERGE", "IF-MATCH": "*" },
+      "body": { "__metadata": { "type": "SP.Field" }, "Indexed": true }
+    },
+    {
+      "step": "unique Title (after the index)",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Snapshot')/fields/getbyinternalnameortitle('Title')",
+      "headers": { "X-HTTP-Method": "MERGE", "IF-MATCH": "*" },
+      "body": { "__metadata": { "type": "SP.Field" }, "EnforceUniqueValues": true }
+    }
+  ]
+}

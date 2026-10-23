@@ -1,0 +1,326 @@
+{
+  "title": "Opossum Hub (SharePoint page fallback)",
+  "description": "Fallback Hub that needs only the SharePoint connector's 'Send an HTTP request to SharePoint' (standard). It creates one modern page, Opossum-Hub.aspx, in the Site Pages library of __SITE_URL__ with a short intro and three List web parts: Opossum Alerts (its 'Open' view: State ne Resolved, newest first), Opossum Snapshot and Opossum Wraps. Then it publishes the page. Read only: it changes no list data. YMCA work tenant only.",
+  "site": "__SITE_URL__",
+  "prerequisites": [
+    "The three lists exist on __SITE_URL__ (cloud/lists/*.json), including the Alerts list's 'Open' view, which the Alerts web part shows.",
+    "The site has the modern Site Pages feature (step 0 checks for a 'Site Pages' library). A OneDrive personal site (https://<tenant>-my.sharepoint.com/personal/...) normally has no Site Pages library: if step 0 returns 404, this fallback can't run there. Use the Power Apps Hub instead, or ask whether you may use a SharePoint site that you own.",
+    "You run the calls yourself, one by one in order, in a flow you build in your own work account (Manually trigger a flow -> one 'Send an HTTP request to SharePoint' action per step, Site Address __SITE_URL__). The connector adds the sign-in and the request digest; add only the headers listed here."
+  ],
+  "placeholders": {
+    "__SITE_URL__": "your personal SharePoint site URL (Site Address of every call; every uri below is relative to it)",
+    "__SITE_PATH__": "server-relative path of the site, from step 0 (body.ServerRelativeUrl), for example /personal/you_ymca_org or /sites/you",
+    "__LIST_ID_Alerts__ / __LIST_ID_Snapshot__ / __LIST_ID_Wraps__": "list GUIDs from steps 1-3",
+    "__LIST_URL_Alerts__ / __LIST_URL_Snapshot__ / __LIST_URL_Wraps__": "server-relative list URLs from steps 1-3",
+    "__LIST_WEBRELURL_Alerts__ / ...": "list URL relative to the site (the __LIST_URL_ value without __SITE_PATH__ in front)",
+    "__VIEW_ID_AlertsOpen__": "GUID of the Alerts list's 'Open' view, from step 4",
+    "__PAGE_ID__": "the integer Id of the new page, from step 5",
+    "__CANVAS_CONTENT_1__": "the canvasContent1 array below, after replacing its placeholders, serialized to ONE JSON string (in a flow: string(<the array>) or just paste the escaped text from canvasContent1Escaped)"
+  },
+  "defaultHeaders": {
+    "Accept": "application/json;odata=nometadata",
+    "Content-Type": "application/json;odata=nometadata"
+  },
+  "steps": [
+    {
+      "step": 0,
+      "name": "check Site Pages and read the site path",
+      "method": "GET",
+      "uri": "_api/web?$select=ServerRelativeUrl,Title",
+      "headers": {
+        "Accept": "application/json;odata=nometadata"
+      },
+      "body": null,
+      "capture": {
+        "__SITE_PATH__": "body.ServerRelativeUrl"
+      },
+      "then": {
+        "method": "GET",
+        "uri": "_api/web/lists/getbytitle('Site Pages')?$select=Id",
+        "headers": {
+          "Accept": "application/json;odata=nometadata"
+        },
+        "expect": "200. A 404 means this site has no modern pages: stop here (see prerequisites)."
+      }
+    },
+    {
+      "step": 1,
+      "name": "read list Alerts",
+      "method": "GET",
+      "uri": "_api/web/lists/getbytitle('Opossum Alerts')?$select=Id,Title,RootFolder/ServerRelativeUrl&$expand=RootFolder",
+      "headers": {
+        "Accept": "application/json;odata=nometadata"
+      },
+      "body": null,
+      "capture": {
+        "__LIST_ID_Alerts__": "body.Id (a GUID without braces)",
+        "__LIST_URL_Alerts__": "body.RootFolder.ServerRelativeUrl (for example /personal/you_ymca_org/Lists/Opossum Alerts)",
+        "__LIST_WEBRELURL_Alerts__": "the same path with the site's own server-relative path cut off the front (for example /Lists/Opossum Alerts); read the site path in step 0"
+      }
+    },
+    {
+      "step": 2,
+      "name": "read list Snapshot",
+      "method": "GET",
+      "uri": "_api/web/lists/getbytitle('Opossum Snapshot')?$select=Id,Title,RootFolder/ServerRelativeUrl&$expand=RootFolder",
+      "headers": {
+        "Accept": "application/json;odata=nometadata"
+      },
+      "body": null,
+      "capture": {
+        "__LIST_ID_Snapshot__": "body.Id (a GUID without braces)",
+        "__LIST_URL_Snapshot__": "body.RootFolder.ServerRelativeUrl (for example /personal/you_ymca_org/Lists/Opossum Snapshot)",
+        "__LIST_WEBRELURL_Snapshot__": "the same path with the site's own server-relative path cut off the front (for example /Lists/Opossum Snapshot); read the site path in step 0"
+      }
+    },
+    {
+      "step": 3,
+      "name": "read list Wraps",
+      "method": "GET",
+      "uri": "_api/web/lists/getbytitle('Opossum Wraps')?$select=Id,Title,RootFolder/ServerRelativeUrl&$expand=RootFolder",
+      "headers": {
+        "Accept": "application/json;odata=nometadata"
+      },
+      "body": null,
+      "capture": {
+        "__LIST_ID_Wraps__": "body.Id (a GUID without braces)",
+        "__LIST_URL_Wraps__": "body.RootFolder.ServerRelativeUrl (for example /personal/you_ymca_org/Lists/Opossum Wraps)",
+        "__LIST_WEBRELURL_Wraps__": "the same path with the site's own server-relative path cut off the front (for example /Lists/Opossum Wraps); read the site path in step 0"
+      }
+    },
+    {
+      "step": 4,
+      "name": "read the Alerts 'Open' view (State ne Resolved)",
+      "method": "GET",
+      "uri": "_api/web/lists/getbytitle('Opossum Alerts')/views/getbytitle('Open')?$select=Id,Title",
+      "headers": {
+        "Accept": "application/json;odata=nometadata"
+      },
+      "body": null,
+      "capture": {
+        "__VIEW_ID_AlertsOpen__": "body.Id"
+      },
+      "ifMissing": "404 means the view was not created. Create it first with the 'view Open' calls in cloud/lists/opossum-alerts.json (CAML: <Where><Neq><FieldRef Name='State' /><Value Type='Choice'>Resolved</Value></Neq></Where><OrderBy><FieldRef Name='At' Ascending='FALSE' /></OrderBy>), then repeat this step."
+    },
+    {
+      "step": 5,
+      "name": "create the draft page",
+      "method": "POST",
+      "uri": "_api/sitepages/pages",
+      "headers": {
+        "Accept": "application/json;odata=nometadata",
+        "Content-Type": "application/json;odata=nometadata"
+      },
+      "body": {
+        "PageLayoutType": "Article",
+        "PromotedState": 0
+      },
+      "capture": {
+        "__PAGE_ID__": "body.Id"
+      },
+      "note": "Creates a checked-out draft with a temporary file name. The first save in step 6 names the file after its Title."
+    },
+    {
+      "step": 6,
+      "name": "save the content and name the file Opossum-Hub.aspx",
+      "method": "POST",
+      "uri": "_api/sitepages/pages(__PAGE_ID__)/SavePageAsDraft",
+      "headers": {
+        "Accept": "application/json;odata=nometadata",
+        "Content-Type": "application/json;odata=nometadata"
+      },
+      "body": {
+        "Title": "Opossum-Hub",
+        "CanvasContent1": "__CANVAS_CONTENT_1__",
+        "LayoutWebpartsContent": "[]",
+        "BannerImageUrl": "",
+        "TopicHeader": ""
+      },
+      "expect": "200 with true. Then step 7 must show Name = Opossum-Hub.aspx."
+    },
+    {
+      "step": 7,
+      "name": "check the file name",
+      "method": "GET",
+      "uri": "_api/sitepages/pages(__PAGE_ID__)?$select=Id,Name,Title,AbsoluteUrl",
+      "headers": {
+        "Accept": "application/json;odata=nometadata"
+      },
+      "body": null,
+      "expect": "body.Name is Opossum-Hub.aspx. If it still has the temporary name, rename the file: POST _api/web/getfilebyserverrelativeurl('__SITE_PATH__/SitePages/<body.Name>')/moveto(newurl='__SITE_PATH__/SitePages/Opossum-Hub.aspx',flags=1) with no body."
+    },
+    {
+      "step": 8,
+      "name": "publish",
+      "method": "POST",
+      "uri": "_api/sitepages/pages(__PAGE_ID__)/Publish",
+      "headers": {
+        "Accept": "application/json;odata=nometadata",
+        "Content-Type": "application/json;odata=nometadata"
+      },
+      "body": null,
+      "expect": "200 with true. The page is now at __SITE_URL__/SitePages/Opossum-Hub.aspx."
+    },
+    {
+      "step": 9,
+      "name": "verify what SharePoint stored (optional but recommended)",
+      "method": "GET",
+      "uri": "_api/sitepages/pages(__PAGE_ID__)?$select=CanvasContent1",
+      "headers": {
+        "Accept": "application/json;odata=nometadata"
+      },
+      "body": null,
+      "expect": "Open the page in the browser: three list web parts show data. If a web part says 'list not found' or is empty, add one List web part by hand on a test page, read that page's CanvasContent1 the same way, and copy its webPartData.properties shape (SharePoint changes this shape from time to time)."
+    }
+  ],
+  "rerun": "Running steps 5-8 again creates a second page (SharePoint appends a number to the name). To change the existing page instead: POST _api/sitepages/pages(__PAGE_ID__)/checkoutpage, then steps 6 and 8 again.",
+  "canvasContent1Notes": [
+    "List web part id f92bf067-bc19-489e-a556-7fe95f508720 (built in). Its properties need the list GUID (selectedListId) and URL; the Alerts part also sets selectedViewId to the 'Open' view, so resolved alerts are hidden.",
+    "webpartHeightKey picks the web part height (1 = small ... larger numbers are taller); 1 fits the one Snapshot row.",
+    "The last entry (controlType 0, pageSettingsSlice) is what SharePoint itself writes at the end of the canvas.",
+    "controlType 4 is the built-in Text web part"
+  ],
+  "canvasContent1": [
+    {
+      "controlType": 4,
+      "id": "6a1e0f38-3c51-4c0e-9f43-0d1c5e7a2b01",
+      "position": {
+        "zoneIndex": 1,
+        "sectionIndex": 1,
+        "controlIndex": 1,
+        "layoutIndex": 1,
+        "sectionFactor": 12
+      },
+      "displayMode": 2,
+      "addedFromPersistedData": true,
+      "emphasis": {},
+      "innerHTML": "<h2>Opossum Hub</h2><p>Read only. What the work PC reported, alerts that are not resolved yet, and the 4:30 wraps. Fixing a workflow still happens on the PC.</p>"
+    },
+    {
+      "controlType": 3,
+      "id": "6a1e0f38-3c51-4c0e-9f43-0d1c5e7a2b02",
+      "webPartId": "f92bf067-bc19-489e-a556-7fe95f508720",
+      "position": {
+        "zoneIndex": 2,
+        "sectionIndex": 1,
+        "controlIndex": 1,
+        "layoutIndex": 1,
+        "sectionFactor": 12
+      },
+      "emphasis": {},
+      "addedFromPersistedData": true,
+      "webPartData": {
+        "id": "f92bf067-bc19-489e-a556-7fe95f508720",
+        "instanceId": "6a1e0f38-3c51-4c0e-9f43-0d1c5e7a2b02",
+        "title": "List",
+        "description": "Display a list",
+        "serverProcessedContent": {
+          "htmlStrings": {},
+          "searchablePlainTexts": {
+            "listTitle": "Opossum Alerts"
+          },
+          "imageSources": {},
+          "links": {}
+        },
+        "dataVersion": "1.0",
+        "properties": {
+          "isDocumentLibrary": false,
+          "selectedListId": "__LIST_ID_Alerts__",
+          "listTitle": "Opossum Alerts",
+          "selectedListUrl": "__LIST_URL_Alerts__",
+          "webRelativeListUrl": "__LIST_WEBRELURL_Alerts__",
+          "webpartHeightKey": 3,
+          "hideCommandBar": false,
+          "filterBy": {},
+          "selectedViewId": "__VIEW_ID_AlertsOpen__"
+        }
+      }
+    },
+    {
+      "controlType": 3,
+      "id": "6a1e0f38-3c51-4c0e-9f43-0d1c5e7a2b03",
+      "webPartId": "f92bf067-bc19-489e-a556-7fe95f508720",
+      "position": {
+        "zoneIndex": 3,
+        "sectionIndex": 1,
+        "controlIndex": 1,
+        "layoutIndex": 1,
+        "sectionFactor": 12
+      },
+      "emphasis": {},
+      "addedFromPersistedData": true,
+      "webPartData": {
+        "id": "f92bf067-bc19-489e-a556-7fe95f508720",
+        "instanceId": "6a1e0f38-3c51-4c0e-9f43-0d1c5e7a2b03",
+        "title": "List",
+        "description": "Display a list",
+        "serverProcessedContent": {
+          "htmlStrings": {},
+          "searchablePlainTexts": {
+            "listTitle": "Opossum Snapshot"
+          },
+          "imageSources": {},
+          "links": {}
+        },
+        "dataVersion": "1.0",
+        "properties": {
+          "isDocumentLibrary": false,
+          "selectedListId": "__LIST_ID_Snapshot__",
+          "listTitle": "Opossum Snapshot",
+          "selectedListUrl": "__LIST_URL_Snapshot__",
+          "webRelativeListUrl": "__LIST_WEBRELURL_Snapshot__",
+          "webpartHeightKey": 1,
+          "hideCommandBar": false,
+          "filterBy": {}
+        }
+      }
+    },
+    {
+      "controlType": 3,
+      "id": "6a1e0f38-3c51-4c0e-9f43-0d1c5e7a2b04",
+      "webPartId": "f92bf067-bc19-489e-a556-7fe95f508720",
+      "position": {
+        "zoneIndex": 4,
+        "sectionIndex": 1,
+        "controlIndex": 1,
+        "layoutIndex": 1,
+        "sectionFactor": 12
+      },
+      "emphasis": {},
+      "addedFromPersistedData": true,
+      "webPartData": {
+        "id": "f92bf067-bc19-489e-a556-7fe95f508720",
+        "instanceId": "6a1e0f38-3c51-4c0e-9f43-0d1c5e7a2b04",
+        "title": "List",
+        "description": "Display a list",
+        "serverProcessedContent": {
+          "htmlStrings": {},
+          "searchablePlainTexts": {
+            "listTitle": "Opossum Wraps"
+          },
+          "imageSources": {},
+          "links": {}
+        },
+        "dataVersion": "1.0",
+        "properties": {
+          "isDocumentLibrary": false,
+          "selectedListId": "__LIST_ID_Wraps__",
+          "listTitle": "Opossum Wraps",
+          "selectedListUrl": "__LIST_URL_Wraps__",
+          "webRelativeListUrl": "__LIST_WEBRELURL_Wraps__",
+          "webpartHeightKey": 3,
+          "hideCommandBar": false,
+          "filterBy": {}
+        }
+      }
+    },
+    {
+      "controlType": 0,
+      "pageSettingsSlice": {
+        "isDefaultDescription": true,
+        "isDefaultThumbnail": true
+      }
+    }
+  ],
+  "canvasContent1Escaped": "[{\"controlType\":4,\"id\":\"6a1e0f38-3c51-4c0e-9f43-0d1c5e7a2b01\",\"position\":{\"zoneIndex\":1,\"sectionIndex\":1,\"controlIndex\":1,\"layoutIndex\":1,\"sectionFactor\":12},\"displayMode\":2,\"addedFromPersistedData\":true,\"emphasis\":{},\"innerHTML\":\"<h2>Opossum Hub</h2><p>Read only. What the work PC reported, alerts that are not resolved yet, and the 4:30 wraps. Fixing a workflow still happens on the PC.</p>\"},{\"controlType\":3,\"id\":\"6a1e0f38-3c51-4c0e-9f43-0d1c5e7a2b02\",\"webPartId\":\"f92bf067-bc19-489e-a556-7fe95f508720\",\"position\":{\"zoneIndex\":2,\"sectionIndex\":1,\"controlIndex\":1,\"layoutIndex\":1,\"sectionFactor\":12},\"emphasis\":{},\"addedFromPersistedData\":true,\"webPartData\":{\"id\":\"f92bf067-bc19-489e-a556-7fe95f508720\",\"instanceId\":\"6a1e0f38-3c51-4c0e-9f43-0d1c5e7a2b02\",\"title\":\"List\",\"description\":\"Display a list\",\"serverProcessedContent\":{\"htmlStrings\":{},\"searchablePlainTexts\":{\"listTitle\":\"Opossum Alerts\"},\"imageSources\":{},\"links\":{}},\"dataVersion\":\"1.0\",\"properties\":{\"isDocumentLibrary\":false,\"selectedListId\":\"__LIST_ID_Alerts__\",\"listTitle\":\"Opossum Alerts\",\"selectedListUrl\":\"__LIST_URL_Alerts__\",\"webRelativeListUrl\":\"__LIST_WEBRELURL_Alerts__\",\"webpartHeightKey\":3,\"hideCommandBar\":false,\"filterBy\":{},\"selectedViewId\":\"__VIEW_ID_AlertsOpen__\"}}},{\"controlType\":3,\"id\":\"6a1e0f38-3c51-4c0e-9f43-0d1c5e7a2b03\",\"webPartId\":\"f92bf067-bc19-489e-a556-7fe95f508720\",\"position\":{\"zoneIndex\":3,\"sectionIndex\":1,\"controlIndex\":1,\"layoutIndex\":1,\"sectionFactor\":12},\"emphasis\":{},\"addedFromPersistedData\":true,\"webPartData\":{\"id\":\"f92bf067-bc19-489e-a556-7fe95f508720\",\"instanceId\":\"6a1e0f38-3c51-4c0e-9f43-0d1c5e7a2b03\",\"title\":\"List\",\"description\":\"Display a list\",\"serverProcessedContent\":{\"htmlStrings\":{},\"searchablePlainTexts\":{\"listTitle\":\"Opossum Snapshot\"},\"imageSources\":{},\"links\":{}},\"dataVersion\":\"1.0\",\"properties\":{\"isDocumentLibrary\":false,\"selectedListId\":\"__LIST_ID_Snapshot__\",\"listTitle\":\"Opossum Snapshot\",\"selectedListUrl\":\"__LIST_URL_Snapshot__\",\"webRelativeListUrl\":\"__LIST_WEBRELURL_Snapshot__\",\"webpartHeightKey\":1,\"hideCommandBar\":false,\"filterBy\":{}}}},{\"controlType\":3,\"id\":\"6a1e0f38-3c51-4c0e-9f43-0d1c5e7a2b04\",\"webPartId\":\"f92bf067-bc19-489e-a556-7fe95f508720\",\"position\":{\"zoneIndex\":4,\"sectionIndex\":1,\"controlIndex\":1,\"layoutIndex\":1,\"sectionFactor\":12},\"emphasis\":{},\"addedFromPersistedData\":true,\"webPartData\":{\"id\":\"f92bf067-bc19-489e-a556-7fe95f508720\",\"instanceId\":\"6a1e0f38-3c51-4c0e-9f43-0d1c5e7a2b04\",\"title\":\"List\",\"description\":\"Display a list\",\"serverProcessedContent\":{\"htmlStrings\":{},\"searchablePlainTexts\":{\"listTitle\":\"Opossum Wraps\"},\"imageSources\":{},\"links\":{}},\"dataVersion\":\"1.0\",\"properties\":{\"isDocumentLibrary\":false,\"selectedListId\":\"__LIST_ID_Wraps__\",\"listTitle\":\"Opossum Wraps\",\"selectedListUrl\":\"__LIST_URL_Wraps__\",\"webRelativeListUrl\":\"__LIST_WEBRELURL_Wraps__\",\"webpartHeightKey\":3,\"hideCommandBar\":false,\"filterBy\":{}}}},{\"controlType\":0,\"pageSettingsSlice\":{\"isDefaultDescription\":true,\"isDefaultThumbnail\":true}}]"
+}

@@ -1,0 +1,255 @@
+{
+  "displayName": "Opossum · Morning Briefing",
+  "description": "Weekdays at 8:00 Pacific Standard Time reads __ONEDRIVE_FOLDER__/status.json (schemaVersion 1, written by the app), parses it with a schema that requires every field the app always writes, and posts a short plain-language summary to __USER_UPN__ in Teams as the Flow bot (Chat with Flow bot): runs needing attention, failures in the last 24 hours, completed today, running now, and what is still scheduled today. If generatedAt is more than 30 minutes old during work hours (Mon-Fri 07:00-18:00 Pacific), it says the PC hasn't reported instead. If status.json is missing or not in the expected shape, it says the PC hasn't reported and asks to check the PC, the app and OneDrive sync. Read only: it never writes to the OneDrive folder. Standard connectors only (OneDrive for Business, Microsoft Teams).",
+  "contract": {
+    "reads": ["status.json"],
+    "writes": [],
+    "parseJsonActions": {
+      "status.json": "Parse_status_json"
+    }
+  },
+  "connectionReferences": {
+    "shared_onedriveforbusiness": {
+      "connectionName": "__CONN_shared_onedriveforbusiness__",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness"
+    },
+    "shared_teams": {
+      "connectionName": "__CONN_shared_teams__",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_teams"
+    }
+  },
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "$connections": { "defaultValue": {}, "type": "Object" },
+      "$authentication": { "defaultValue": {}, "type": "SecureObject" }
+    },
+    "triggers": {
+      "Recurrence": {
+        "type": "Recurrence",
+        "recurrence": {
+          "frequency": "Week",
+          "interval": 1,
+          "timeZone": "Pacific Standard Time",
+          "schedule": {
+            "weekDays": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+            "hours": ["8"],
+            "minutes": [0]
+          }
+        }
+      }
+    },
+    "actions": {
+      "Get_status_json": {
+        "type": "OpenApiConnection",
+        "runAfter": {},
+        "inputs": {
+          "host": {
+            "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness",
+            "connectionName": "shared_onedriveforbusiness",
+            "operationId": "GetFileContentByPath"
+          },
+          "parameters": {
+            "path": "__ONEDRIVE_FOLDER__/status.json",
+            "inferContentType": false
+          }
+        }
+      },
+      "Parse_status_json": {
+        "type": "ParseJson",
+        "runAfter": {
+          "Get_status_json": ["Succeeded"]
+        },
+        "inputs": {
+          "content": "@json(base64ToString(body('Get_status_json')?['$content']))",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "schemaVersion": { "type": "integer" },
+              "profile": { "type": "string" },
+              "generatedAt": { "type": "string" },
+              "appVersion": { "type": "string" },
+              "needsAttention": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "runId": { "type": "string" },
+                    "workflow": { "type": "string" },
+                    "workflowName": { "type": "string" },
+                    "step": { "type": ["string", "null"] },
+                    "reason": { "type": ["string", "null"] },
+                    "since": { "type": "string" }
+                  },
+                  "required": ["runId", "workflow", "workflowName", "step", "reason", "since"]
+                }
+              },
+              "failedSince": { "type": "string" },
+              "failed": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "runId": { "type": "string" },
+                    "workflow": { "type": "string" },
+                    "workflowName": { "type": "string" },
+                    "step": { "type": ["string", "null"] },
+                    "error": { "type": ["string", "null"] },
+                    "at": { "type": "string" }
+                  },
+                  "required": ["runId", "workflow", "workflowName", "step", "error", "at"]
+                }
+              },
+              "completedToday": { "type": "integer" },
+              "runningNow": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "workflow": { "type": "string" },
+                    "startedAt": { "type": "string" }
+                  },
+                  "required": ["workflow", "startedAt"]
+                }
+              },
+              "scheduledToday": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "workflow": { "type": "string" },
+                    "workflowName": { "type": "string" },
+                    "at": { "type": "string" }
+                  },
+                  "required": ["workflow", "workflowName", "at"]
+                }
+              }
+            },
+            "required": ["schemaVersion", "profile", "generatedAt", "appVersion", "needsAttention", "failedSince", "failed", "completedToday", "runningNow", "scheduledToday"]
+          }
+        }
+      },
+      "Compose_in_work_hours": {
+        "type": "Compose",
+        "runAfter": {
+          "Parse_status_json": ["Succeeded"]
+        },
+        "inputs": "@and(greaterOrEquals(int(convertFromUtc(utcNow(), 'Pacific Standard Time', 'HH')), 7), less(int(convertFromUtc(utcNow(), 'Pacific Standard Time', 'HH')), 18), greaterOrEquals(dayOfWeek(convertFromUtc(utcNow(), 'Pacific Standard Time')), 1), lessOrEquals(dayOfWeek(convertFromUtc(utcNow(), 'Pacific Standard Time')), 5))"
+      },
+      "Check_PC_has_reported": {
+        "type": "If",
+        "runAfter": {
+          "Compose_in_work_hours": ["Succeeded"]
+        },
+        "expression": {
+          "and": [
+            {
+              "equals": [
+                "@and(outputs('Compose_in_work_hours'), less(ticks(body('Parse_status_json')?['generatedAt']), ticks(addMinutes(utcNow(), -30))))",
+                true
+              ]
+            }
+          ]
+        },
+        "actions": {
+          "Post_PC_has_not_reported": {
+            "type": "OpenApiConnection",
+            "runAfter": {},
+            "inputs": {
+              "host": {
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+                "connectionName": "shared_teams",
+                "operationId": "PostMessageToConversation"
+              },
+              "parameters": {
+                "poster": "Flow bot",
+                "location": "Chat with Flow bot",
+                "body/recipient": "__USER_UPN__",
+                "body/messageBody": "<p><b>OG Opossum morning briefing</b><br>Your PC hasn't reported since @{substring(body('Parse_status_json')?['generatedAt'], 11, 5)} on @{substring(body('Parse_status_json')?['generatedAt'], 0, 10)}, so there is no fresh status to share. Is the PC on and OG Opossum Command Central running?</p>"
+              }
+            }
+          }
+        },
+        "else": {
+          "actions": {
+            "Select_attention_names": {
+              "type": "Select",
+              "runAfter": {},
+              "inputs": {
+                "from": "@body('Parse_status_json')?['needsAttention']",
+                "select": "@item()?['workflowName']"
+              }
+            },
+            "Select_failed_names": {
+              "type": "Select",
+              "runAfter": {
+                "Select_attention_names": ["Succeeded"]
+              },
+              "inputs": {
+                "from": "@body('Parse_status_json')?['failed']",
+                "select": "@item()?['workflowName']"
+              }
+            },
+            "Select_scheduled_items": {
+              "type": "Select",
+              "runAfter": {
+                "Select_failed_names": ["Succeeded"]
+              },
+              "inputs": {
+                "from": "@body('Parse_status_json')?['scheduledToday']",
+                "select": "@concat(item()?['workflowName'], ' at ', substring(item()?['at'], 11, 5))"
+              }
+            },
+            "Compose_briefing": {
+              "type": "Compose",
+              "runAfter": {
+                "Select_scheduled_items": ["Succeeded"]
+              },
+              "inputs": "<p><b>OG Opossum morning briefing</b> (as of @{substring(body('Parse_status_json')?['generatedAt'], 11, 5)})<br>Needs attention: @{length(body('Parse_status_json')?['needsAttention'])}@{if(empty(body('Select_attention_names')), '', concat(' (', replace(replace(join(take(union(body('Select_attention_names'), body('Select_attention_names')), 5), ', '), '&', '&amp;'), '<', '&lt;'), ')'))}<br>Failed in the last 24 hours: @{length(body('Parse_status_json')?['failed'])}@{if(empty(body('Select_failed_names')), '', concat(' (', replace(replace(join(take(union(body('Select_failed_names'), body('Select_failed_names')), 5), ', '), '&', '&amp;'), '<', '&lt;'), ')'))}<br>Completed today: @{body('Parse_status_json')?['completedToday']}<br>Running now: @{length(body('Parse_status_json')?['runningNow'])}<br>Still scheduled today: @{length(body('Parse_status_json')?['scheduledToday'])}@{if(empty(body('Select_scheduled_items')), '', concat(' (', replace(replace(join(take(body('Select_scheduled_items'), 5), ', '), '&', '&amp;'), '<', '&lt;'), ')'))}<br>@{if(and(empty(body('Parse_status_json')?['needsAttention']), empty(body('Parse_status_json')?['failed'])), 'All clear: nothing needs you right now.', 'Open OG Opossum Command Central on your PC to Resume or Dismiss.')}</p>"
+            },
+            "Post_briefing": {
+              "type": "OpenApiConnection",
+              "runAfter": {
+                "Compose_briefing": ["Succeeded"]
+              },
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+                  "connectionName": "shared_teams",
+                  "operationId": "PostMessageToConversation"
+                },
+                "parameters": {
+                  "poster": "Flow bot",
+                  "location": "Chat with Flow bot",
+                  "body/recipient": "__USER_UPN__",
+                  "body/messageBody": "@{outputs('Compose_briefing')}"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Post_status_unreadable": {
+        "type": "OpenApiConnection",
+        "runAfter": {
+          "Parse_status_json": ["Failed", "Skipped", "TimedOut"]
+        },
+        "inputs": {
+          "host": {
+            "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+            "connectionName": "shared_teams",
+            "operationId": "PostMessageToConversation"
+          },
+          "parameters": {
+            "poster": "Flow bot",
+            "location": "Chat with Flow bot",
+            "body/recipient": "__USER_UPN__",
+            "body/messageBody": "<p><b>OG Opossum morning briefing</b><br>Your PC hasn't reported: status.json could not be read from your work OneDrive this morning (it is missing or not in the expected shape). Is the PC on, OG Opossum Command Central running, and OneDrive syncing? Settings &gt; Exports in the app says why.</p>"
+          }
+        }
+      }
+    },
+    "outputs": {}
+  }
+}

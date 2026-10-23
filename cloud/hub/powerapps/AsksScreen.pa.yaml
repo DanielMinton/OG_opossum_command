@@ -1,0 +1,270 @@
+# Opossum Hub - Asks screen. What people asked you for, caught by the Request Catcher flow into your
+# Microsoft To Do list "Requests". Read live from To Do: nothing is copied anywhere else.
+# Data: the Microsoft To-Do (Business) connector (standard). In formulas it is called MicrosoftToDoBusiness here;
+#   if the Data pane shows another name for it, Find and Replace "MicrosoftToDoBusiness" with that name.
+# Operations used (connector reference): GetAllTodoListsV2, ListToDosByFolderV2, UpdateToDoV2.
+# The only write: "Done" sets the task's status to completed.
+Screens:
+  AsksScreen:
+    Properties:
+      Fill: =ColorValue("#f5f5f8")
+      OnVisible: |-
+        =Set(gReqListId, LookUp(MicrosoftToDoBusiness.GetAllTodoListsV2(), displayName = "Requests").id);
+        If(
+            IsBlank(gReqListId),
+            Clear(colAsks),
+            ClearCollect(
+                colAsks,
+                Sort(
+                    Filter(MicrosoftToDoBusiness.ListToDosByFolderV2(gReqListId, {'$top': 200}), status <> "completed"),
+                    Coalesce(Left(Text(ThisRecord.dueDateTime.dateTime, "yyyy-mm-dd"), 10), "9999-12-31"),
+                    SortOrder.Ascending
+                )
+            )
+        )
+    Children:
+      - askRoot:
+          Control: GroupContainer
+          Variant: AutoLayout
+          Properties:
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height
+            Fill: =ColorValue("#f5f5f8")
+            DropShadow: =DropShadow.None
+            LayoutDirection: =LayoutDirection.Vertical
+            LayoutAlignItems: =LayoutAlignItems.Stretch
+            LayoutGap: =0
+          Children:
+            - askHeader:
+                Control: GroupContainer
+                Variant: AutoLayout
+                Properties:
+                  Height: =56
+                  FillPortions: =0
+                  Fill: =ColorValue("#ffffff")
+                  BorderColor: =ColorValue("#e2e2ea")
+                  BorderThickness: =1
+                  DropShadow: =DropShadow.None
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutAlignItems: =LayoutAlignItems.Center
+                  LayoutGap: =8
+                  PaddingLeft: =16
+                  PaddingRight: =8
+                Children:
+                  - askTitle:
+                      Control: ModernText@1.0.0
+                      Properties:
+                        Text: ="Asks"
+                        Size: =20
+                        FontWeight: =FontWeight.Semibold
+                        Color: =ColorValue("#15151c")
+                        FillPortions: =1
+                        Height: =40
+                  - askCount:
+                      Control: ModernText@1.0.0
+                      Properties:
+                        Text: =CountRows(colAsks) & " open"
+                        Size: =13
+                        Align: =Align.Right
+                        Color: =ColorValue("#5d5e6e")
+                        Width: =90
+                        Height: =32
+                  - askRefresh:
+                      Control: ModernButton@1.0.0
+                      Properties:
+                        Text: ="Refresh"
+                        Icon: ="ArrowClockwise"
+                        Layout: =ButtonLayout.IconOnly
+                        AccessibleLabel: ="Refresh"
+                        Appearance: =ButtonAppearance.Subtle
+                        BasePaletteColor: =ColorValue("#5457c4")
+                        Width: =40
+                        Height: =40
+                        OnSelect: |-
+                          =Set(gReqListId, LookUp(MicrosoftToDoBusiness.GetAllTodoListsV2(), displayName = "Requests").id);
+                          If(
+                              IsBlank(gReqListId),
+                              Clear(colAsks),
+                              ClearCollect(
+                                  colAsks,
+                                  Sort(
+                                      Filter(MicrosoftToDoBusiness.ListToDosByFolderV2(gReqListId, {'$top': 200}), status <> "completed"),
+                                      Coalesce(Left(Text(ThisRecord.dueDateTime.dateTime, "yyyy-mm-dd"), 10), "9999-12-31"),
+                                      SortOrder.Ascending
+                                  )
+                              )
+                          )
+            - askEmpty:
+                Control: ModernText@1.0.0
+                Properties:
+                  Visible: =CountRows(colAsks) = 0
+                  Text: |-
+                    =If(IsBlank(gReqListId), "No To Do list named Requests yet. The Request Catcher flow fills it.", "Nothing open. Nice.")
+                  Size: =13
+                  Wrap: =true
+                  Color: =ColorValue("#5d5e6e")
+                  Height: =56
+                  FillPortions: =0
+                  PaddingLeft: =16
+                  PaddingRight: =16
+            - askGallery:
+                Control: Gallery
+                Variant: Vertical
+                Properties:
+                  Items: =colAsks
+                  TemplateSize: =128
+                  TemplatePadding: =8
+                  FillPortions: =1
+                  Fill: =ColorValue("#f5f5f8")
+                  ShowScrollbar: =true
+                Children:
+                  - askCard:
+                      Control: GroupContainer
+                      Variant: ManualLayout
+                      Properties:
+                        X: =8
+                        Y: =0
+                        Width: =Parent.TemplateWidth - 16
+                        Height: =Parent.TemplateHeight
+                        Fill: =ColorValue("#ffffff")
+                        BorderColor: =ColorValue("#e2e2ea")
+                        BorderThickness: =1
+                        RadiusTopLeft: =12
+                        RadiusTopRight: =12
+                        RadiusBottomLeft: =12
+                        RadiusBottomRight: =12
+                        DropShadow: =DropShadow.None
+                      Children:
+                        - askItemTitle:
+                            Control: ModernText@1.0.0
+                            Properties:
+                              Text: =ThisItem.title
+                              Size: =15
+                              FontWeight: =FontWeight.Semibold
+                              Wrap: =true
+                              VerticalAlign: =VerticalAlign.Top
+                              Color: =ColorValue("#15151c")
+                              X: =14
+                              Y: =10
+                              Width: =Parent.Width - 120
+                              Height: =44
+                        - askItemDue:
+                            Control: ModernText@1.0.0
+                            Properties:
+                              Text: |-
+                                =With(
+                                    {d: If(IsBlank(ThisItem.dueDateTime.dateTime), Blank(), DateValue(Left(Text(ThisItem.dueDateTime.dateTime, "yyyy-mm-dd"), 10)))},
+                                    If(IsBlank(d), "no due date", If(d < Today(), "overdue · ", If(d = Today(), "due today · ", "due ")) & Text(d, "ddd mmm d"))
+                                )
+                              Size: =12
+                              FontWeight: =FontWeight.Semibold
+                              Align: =Align.Right
+                              Color: |-
+                                =If(
+                                    !IsBlank(ThisItem.dueDateTime.dateTime) && DateValue(Left(Text(ThisItem.dueDateTime.dateTime, "yyyy-mm-dd"), 10)) < Today(),
+                                    ColorValue("#c22f48"),
+                                    ColorValue("#5d5e6e")
+                                )
+                              X: =Parent.Width - 104
+                              Y: =10
+                              Width: =92
+                              Height: =40
+                              Wrap: =true
+                        - askItemStatus:
+                            Control: ModernText@1.0.0
+                            Properties:
+                              Text: |-
+                                =Switch(ThisItem.status, "waitingOnOthers", "waiting on others", "inProgress", "in progress", "deferred", "deferred", "")
+                              Size: =12
+                              Color: =ColorValue("#a85a00")
+                              X: =14
+                              Y: =56
+                              Width: =Parent.Width - 28
+                              Height: =20
+                        - askDone:
+                            Control: ModernButton@1.0.0
+                            Properties:
+                              Text: ="Done"
+                              AccessibleLabel: ="Mark this ask done in To Do"
+                              Appearance: =ButtonAppearance.Primary
+                              BasePaletteColor: =ColorValue("#5457c4")
+                              X: =14
+                              Y: =Parent.Height - 44
+                              Width: =88
+                              Height: =32
+                              OnSelect: |-
+                                =IfError(
+                                    MicrosoftToDoBusiness.UpdateToDoV2(gReqListId, ThisItem.id, {status: "completed"});
+                                    Remove(colAsks, ThisItem),
+                                    Notify("Couldn't complete it in To Do: " & FirstError.Message, NotificationType.Error)
+                                )
+                        - askOpen:
+                            Control: ModernButton@1.0.0
+                            Properties:
+                              Visible: |-
+                                =!IsBlank(Match(Coalesce(ThisItem.body.content, ""), "https://[^\s""'<>]+"))
+                              Text: ="Open"
+                              AccessibleLabel: ="Open the original message"
+                              Appearance: =ButtonAppearance.Outline
+                              BasePaletteColor: =ColorValue("#5457c4")
+                              X: =110
+                              Y: =Parent.Height - 44
+                              Width: =88
+                              Height: =32
+                              OnSelect: |-
+                                =With({m: Match(Coalesce(ThisItem.body.content, ""), "https://[^\s""'<>]+")}, If(!IsBlank(m), Launch(m.FullMatch)))
+            - askNav:
+                Control: GroupContainer
+                Variant: AutoLayout
+                Properties:
+                  Height: =60
+                  FillPortions: =0
+                  Fill: =ColorValue("#ffffff")
+                  BorderColor: =ColorValue("#e2e2ea")
+                  BorderThickness: =1
+                  DropShadow: =DropShadow.None
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutAlignItems: =LayoutAlignItems.Center
+                  LayoutGap: =4
+                  PaddingLeft: =8
+                  PaddingRight: =8
+                Children:
+                  - askNavNow:
+                      Control: ModernButton@1.0.0
+                      Properties:
+                        Text: ="Now"
+                        Appearance: =ButtonAppearance.Subtle
+                        BasePaletteColor: =ColorValue("#5457c4")
+                        FillPortions: =1
+                        Height: =40
+                        OnSelect: =Navigate(NowScreen)
+                  - askNavAlerts:
+                      Control: ModernButton@1.0.0
+                      Properties:
+                        Text: |-
+                          =With({n: CountRows(Filter('Opossum Alerts', State.Value = "New"))}, "Alerts" & If(n > 0, " " & n, ""))
+                        Appearance: =ButtonAppearance.Subtle
+                        BasePaletteColor: =ColorValue("#5457c4")
+                        FillPortions: =1
+                        Height: =40
+                        OnSelect: =Navigate(AlertsScreen)
+                  - askNavAsks:
+                      Control: ModernButton@1.0.0
+                      Properties:
+                        Text: ="Asks"
+                        Appearance: =ButtonAppearance.Primary
+                        BasePaletteColor: =ColorValue("#5457c4")
+                        FillPortions: =1
+                        Height: =40
+                        OnSelect: =Navigate(AsksScreen)
+                  - askNavDay:
+                      Control: ModernButton@1.0.0
+                      Properties:
+                        Text: ="Day"
+                        Appearance: =ButtonAppearance.Subtle
+                        BasePaletteColor: =ColorValue("#5457c4")
+                        FillPortions: =1
+                        Height: =40
+                        OnSelect: =Navigate(DayScreen)

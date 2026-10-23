@@ -1,0 +1,194 @@
+{
+  "displayName": "Opossum · Request Catcher",
+  "description": "When the user flags an email in their work Inbox (Office 365 Outlook 'When an email is flagged (V4)', polled every 3 minutes, one run per message), adds a task to the user's Microsoft To Do (Business) list 'Requests' (created on first use if it does not exist). Title = the email subject (or '(no subject)'), at most 255 characters. Body = sender address, received time in Pacific time, a link back to the message in Outlook on the web, and a hidden dedupe marker 'opossum-msgid:<URI-encoded internetMessageId>'. The email body and body preview are never copied. If a task in 'Requests' already carries that marker (the email was flagged, unflagged and flagged again, or moved), nothing is created. No due date is set: the standard trigger output carries no flag due date. Teams messages are NOT caught by this flow: a cloud flow has exactly one trigger, and the standard Teams mention triggers ('When I am mentioned in a channel message', 'When I'm @mentioned') are bound to one chosen team/channel or chat, so they cannot be a second branch here. Writes no file in __ONEDRIVE_FOLDER__; the 4:30 Wrap reads 'Requests' and marks these tasks source 'email' in tomorrow.json. Standard connectors only (Office 365 Outlook, Microsoft To Do (Business)); everything stays in the work tenant.",
+  "contract": {
+    "reads": [],
+    "writes": [],
+    "parseJsonActions": {}
+  },
+  "connectionReferences": {
+    "shared_office365": {
+      "connectionName": "__CONN_shared_office365__",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_office365"
+    },
+    "shared_todo": {
+      "connectionName": "__CONN_shared_todo__",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_todo"
+    }
+  },
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "$connections": { "defaultValue": {}, "type": "Object" },
+      "$authentication": { "defaultValue": {}, "type": "SecureObject" }
+    },
+    "triggers": {
+      "When_an_email_is_flagged_(V4)": {
+        "type": "OpenApiConnection",
+        "recurrence": {
+          "frequency": "Minute",
+          "interval": 3
+        },
+        "splitOn": "@triggerOutputs()?['body/value']",
+        "runtimeConfiguration": {
+          "concurrency": {
+            "runs": 1
+          }
+        },
+        "inputs": {
+          "host": {
+            "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+            "connectionName": "shared_office365",
+            "operationId": "OnFlaggedEmailV4"
+          },
+          "parameters": {
+            "folderPath": "Inbox",
+            "importance": "Any",
+            "fetchOnlyWithAttachment": false,
+            "includeAttachments": false
+          }
+        }
+      }
+    },
+    "actions": {
+      "Init_RequestsListId": {
+        "type": "InitializeVariable",
+        "runAfter": {},
+        "inputs": { "variables": [ { "name": "RequestsListId", "type": "string", "value": "" } ] }
+      },
+      "Dedupe_marker": {
+        "type": "Compose",
+        "runAfter": { "Init_RequestsListId": ["Succeeded"] },
+        "inputs": "@concat('opossum-msgid:', encodeUriComponent(coalesce(triggerBody()?['internetMessageId'], triggerBody()?['id'])))"
+      },
+      "Message_link": {
+        "type": "Compose",
+        "runAfter": { "Dedupe_marker": ["Succeeded"] },
+        "inputs": "@concat('https://outlook.office365.com/owa/?ItemID=', encodeUriComponent(triggerBody()?['id']), '&exvsurl=1&viewmodel=ReadMessageItem')"
+      },
+      "Task_title": {
+        "type": "Compose",
+        "runAfter": { "Message_link": ["Succeeded"] },
+        "inputs": "@take(if(empty(trim(coalesce(triggerBody()?['subject'], ''))), '(no subject)', trim(coalesce(triggerBody()?['subject'], ''))), 255)"
+      },
+      "Sender_html": {
+        "type": "Compose",
+        "runAfter": { "Task_title": ["Succeeded"] },
+        "inputs": "@replace(replace(replace(coalesce(triggerBody()?['from'], '(unknown sender)'), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')"
+      },
+      "Received_local": {
+        "type": "Compose",
+        "runAfter": { "Sender_html": ["Succeeded"] },
+        "inputs": "@convertFromUtc(coalesce(triggerBody()?['receivedDateTime'], utcNow()), 'Pacific Standard Time', 'ddd M/d/yyyy h:mm tt')"
+      },
+      "List_todo_lists": {
+        "type": "OpenApiConnection",
+        "runAfter": { "Received_local": ["Succeeded"] },
+        "inputs": {
+          "host": {
+            "apiId": "/providers/Microsoft.PowerApps/apis/shared_todo",
+            "connectionName": "shared_todo",
+            "operationId": "GetAllTodoListsV2"
+          },
+          "parameters": {}
+        }
+      },
+      "Filter_requests_list": {
+        "type": "Query",
+        "runAfter": { "List_todo_lists": ["Succeeded"] },
+        "inputs": {
+          "from": "@body('List_todo_lists')",
+          "where": "@equals(item()?['displayName'], 'Requests')"
+        }
+      },
+      "If_requests_list_exists": {
+        "type": "If",
+        "runAfter": { "Filter_requests_list": ["Succeeded"] },
+        "expression": {
+          "and": [ { "greater": ["@length(body('Filter_requests_list'))", 0] } ]
+        },
+        "actions": {
+          "Set_existing_list_id": {
+            "type": "SetVariable",
+            "runAfter": {},
+            "inputs": { "name": "RequestsListId", "value": "@first(body('Filter_requests_list'))?['id']" }
+          }
+        },
+        "else": {
+          "actions": {
+            "Create_requests_list": {
+              "type": "OpenApiConnection",
+              "runAfter": {},
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_todo",
+                  "connectionName": "shared_todo",
+                  "operationId": "CreateToDoListV2"
+                },
+                "parameters": {
+                  "displayName": "Requests"
+                }
+              }
+            },
+            "Set_new_list_id": {
+              "type": "SetVariable",
+              "runAfter": { "Create_requests_list": ["Succeeded"] },
+              "inputs": { "name": "RequestsListId", "value": "@body('Create_requests_list')?['id']" }
+            }
+          }
+        }
+      },
+      "List_requests_tasks": {
+        "type": "OpenApiConnection",
+        "runAfter": { "If_requests_list_exists": ["Succeeded"] },
+        "inputs": {
+          "host": {
+            "apiId": "/providers/Microsoft.PowerApps/apis/shared_todo",
+            "connectionName": "shared_todo",
+            "operationId": "ListToDosByFolderV2"
+          },
+          "parameters": {
+            "folderId": "@variables('RequestsListId')",
+            "$top": 999
+          }
+        }
+      },
+      "Filter_same_message": {
+        "type": "Query",
+        "runAfter": { "List_requests_tasks": ["Succeeded"] },
+        "inputs": {
+          "from": "@body('List_requests_tasks')",
+          "where": "@contains(string(item()?['body']?['content']), outputs('Dedupe_marker'))"
+        }
+      },
+      "If_not_caught_yet": {
+        "type": "If",
+        "runAfter": { "Filter_same_message": ["Succeeded"] },
+        "expression": {
+          "and": [ { "equals": ["@length(body('Filter_same_message'))", 0] } ]
+        },
+        "actions": {
+          "Add_request_to_do": {
+            "type": "OpenApiConnection",
+            "runAfter": {},
+            "inputs": {
+              "host": {
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_todo",
+                "connectionName": "shared_todo",
+                "operationId": "CreateToDoV3"
+              },
+              "parameters": {
+                "folderId": "@variables('RequestsListId')",
+                "item/title": "@outputs('Task_title')",
+                "item/body/content": "<p>From: @{outputs('Sender_html')}<br>Received: @{outputs('Received_local')} (Pacific)<br><a href=\"@{outputs('Message_link')}\">Open the email in Outlook</a></p><p style=\"color:#888888;font-size:smaller\">@{outputs('Dedupe_marker')}</p>"
+              }
+            }
+          }
+        },
+        "else": { "actions": {} }
+      }
+    },
+    "outputs": {}
+  }
+}

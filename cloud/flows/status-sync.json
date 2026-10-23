@@ -1,0 +1,604 @@
+{
+  "displayName": "Opossum · Status sync",
+  "description": "When the app rewrites OG_opossum_command/status.json in the work OneDrive, parse it (schemaVersion 1), upsert the single 'Opossum Snapshot' row (Title 'status', found with $filter Title eq 'status'; RunningNow is a count, NextScheduled/NextScheduledName come from the first scheduledToday entry), and mark open 'Opossum Alerts' rows Resolved for workflows whose problem has cleared. status.json carries no per-workflow completion list (completedToday is a count), so 'completed since last run' is inferred conservatively from the previous snapshot's RawJson: an alert resolves only when its workflow is no longer needing attention or running, and either (a) it is a run.needsAttention alert, or (b) completedToday rose since the last sync and the workflow was running last time and has no new failure, or (c) completedToday rose and the workflow has no failure left in the 24 h 'failed' window. Runs out of order or stale copies are ignored by comparing generatedAt.",
+  "contract": {
+    "reads": [
+      "status.json"
+    ],
+    "writes": [],
+    "parseJsonActions": {
+      "status.json": "Parse_status_json"
+    }
+  },
+  "connectionReferences": {
+    "shared_onedriveforbusiness": {
+      "connectionName": "__CONN_shared_onedriveforbusiness__",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness"
+    },
+    "shared_sharepointonline": {
+      "connectionName": "__CONN_shared_sharepointonline__",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+    }
+  },
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "$connections": {
+        "defaultValue": {},
+        "type": "Object"
+      },
+      "$authentication": {
+        "defaultValue": {},
+        "type": "SecureObject"
+      }
+    },
+    "triggers": {
+      "When_status_json_is_modified": {
+        "type": "OpenApiConnection",
+        "description": "OneDrive for Business: When a file is modified (properties only), folder __ONEDRIVE_FOLDER__, no subfolders. folderId takes the folder's unique id, not its path: __ONEDRIVE_FOLDER_ID__ is filled at deploy time by re-picking __ONEDRIVE_FOLDER__ (/OG_opossum_command) in the trigger's Folder box after import (the metadata block maps the id to that path). Only status.json starts a run (calendar.json and tomorrow.json live in the same folder).",
+        "inputs": {
+          "host": {
+            "connectionName": "shared_onedriveforbusiness",
+            "operationId": "OnUpdatedFilesV2",
+            "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness"
+          },
+          "parameters": {
+            "folderId": "__ONEDRIVE_FOLDER_ID__",
+            "includeSubfolders": false
+          }
+        },
+        "recurrence": {
+          "frequency": "Minute",
+          "interval": 1
+        },
+        "splitOn": "@triggerOutputs()?['body/value']",
+        "conditions": [
+          {
+            "expression": "@equals(toLower(coalesce(triggerBody()?['Name'], '')), 'status.json')"
+          }
+        ],
+        "runtimeConfiguration": {
+          "concurrency": {
+            "runs": 1
+          }
+        },
+        "metadata": {
+          "__ONEDRIVE_FOLDER_ID__": "/OG_opossum_command"
+        }
+      }
+    },
+    "actions": {
+      "Get_status_json_content": {
+        "type": "OpenApiConnection",
+        "runAfter": {},
+        "inputs": {
+          "host": {
+            "connectionName": "shared_onedriveforbusiness",
+            "operationId": "GetFileContent",
+            "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness"
+          },
+          "parameters": {
+            "id": "@triggerBody()?['Id']",
+            "inferContentType": false
+          }
+        }
+      },
+      "Parse_status_json": {
+        "type": "ParseJson",
+        "runAfter": {
+          "Get_status_json_content": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "content": "@json(base64ToString(body('Get_status_json_content')?['$content']))",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "schemaVersion": {
+                "type": "integer"
+              },
+              "profile": {
+                "type": "string"
+              },
+              "generatedAt": {
+                "type": "string"
+              },
+              "appVersion": {
+                "type": "string"
+              },
+              "needsAttention": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "runId": {
+                      "type": "string"
+                    },
+                    "workflow": {
+                      "type": "string"
+                    },
+                    "workflowName": {
+                      "type": "string"
+                    },
+                    "step": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "reason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "since": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "failedSince": {
+                "type": "string"
+              },
+              "failed": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "runId": {
+                      "type": "string"
+                    },
+                    "workflow": {
+                      "type": "string"
+                    },
+                    "workflowName": {
+                      "type": "string"
+                    },
+                    "step": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "error": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "at": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "completedToday": {
+                "type": "integer"
+              },
+              "runningNow": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "workflow": {
+                      "type": "string"
+                    },
+                    "startedAt": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "scheduledToday": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "workflow": {
+                      "type": "string"
+                    },
+                    "workflowName": {
+                      "type": "string"
+                    },
+                    "at": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "required": [
+              "schemaVersion",
+              "generatedAt",
+              "needsAttention",
+              "failed",
+              "completedToday",
+              "runningNow",
+              "scheduledToday"
+            ]
+          }
+        }
+      },
+      "Check_schema_version": {
+        "type": "If",
+        "runAfter": {
+          "Parse_status_json": [
+            "Succeeded"
+          ]
+        },
+        "expression": {
+          "and": [
+            {
+              "equals": [
+                "@body('Parse_status_json')?['schemaVersion']",
+                1
+              ]
+            }
+          ]
+        },
+        "actions": {},
+        "else": {
+          "actions": {
+            "Terminate_unknown_schema": {
+              "type": "Terminate",
+              "inputs": {
+                "runStatus": "Failed",
+                "runError": {
+                  "code": "StatusSchemaVersion",
+                  "message": "status.json has a schemaVersion other than 1; update this flow."
+                }
+              }
+            }
+          }
+        }
+      },
+      "Get_snapshot_row": {
+        "type": "OpenApiConnection",
+        "runAfter": {
+          "Check_schema_version": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "host": {
+            "connectionName": "shared_sharepointonline",
+            "operationId": "GetItems",
+            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+          },
+          "parameters": {
+            "dataset": "__SITE_URL__",
+            "table": "Opossum Snapshot",
+            "$filter": "Title eq 'status'",
+            "$top": 1
+          }
+        }
+      },
+      "Snapshot_row": {
+        "type": "Compose",
+        "description": "The existing Snapshot row, or null on the very first run.",
+        "runAfter": {
+          "Get_snapshot_row": [
+            "Succeeded"
+          ]
+        },
+        "inputs": "@first(body('Get_snapshot_row')?['value'])"
+      },
+      "Previous_status": {
+        "type": "Compose",
+        "description": "The status.json stored by the previous run (RawJson), or {} when there is none.",
+        "runAfter": {
+          "Snapshot_row": [
+            "Succeeded"
+          ]
+        },
+        "inputs": "@json(if(empty(outputs('Snapshot_row')?['RawJson']), '{}', string(outputs('Snapshot_row')?['RawJson'])))"
+      },
+      "Check_file_is_newer": {
+        "type": "If",
+        "description": "Ignore a run that sees the same or an older status.json (OneDrive can report one change twice).",
+        "runAfter": {
+          "Previous_status": [
+            "Succeeded"
+          ]
+        },
+        "expression": {
+          "and": [
+            {
+              "less": [
+                "@ticks(coalesce(outputs('Previous_status')?['generatedAt'], '1900-01-01T00:00:00Z'))",
+                "@ticks(body('Parse_status_json')?['generatedAt'])"
+              ]
+            }
+          ]
+        },
+        "actions": {},
+        "else": {
+          "actions": {
+            "Terminate_not_newer": {
+              "type": "Terminate",
+              "inputs": {
+                "runStatus": "Succeeded"
+              }
+            }
+          }
+        }
+      },
+      "Running_workflows": {
+        "type": "Select",
+        "runAfter": {
+          "Check_file_is_newer": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "from": "@body('Parse_status_json')?['runningNow']",
+          "select": "@item()?['workflow']"
+        }
+      },
+      "Need_attention_workflows": {
+        "type": "Select",
+        "runAfter": {
+          "Running_workflows": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "from": "@body('Parse_status_json')?['needsAttention']",
+          "select": "@item()?['workflow']"
+        }
+      },
+      "Failed_workflows": {
+        "type": "Select",
+        "runAfter": {
+          "Need_attention_workflows": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "from": "@body('Parse_status_json')?['failed']",
+          "select": "@item()?['workflow']"
+        }
+      },
+      "New_failures": {
+        "type": "Query",
+        "description": "Failures newer than the previous status.json (all of the 24 h window on the first run).",
+        "runAfter": {
+          "Failed_workflows": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "from": "@body('Parse_status_json')?['failed']",
+          "where": "@greater(ticks(item()?['at']), ticks(coalesce(outputs('Previous_status')?['generatedAt'], body('Parse_status_json')?['failedSince'], '1900-01-01T00:00:00Z')))"
+        }
+      },
+      "New_failed_workflows": {
+        "type": "Select",
+        "runAfter": {
+          "New_failures": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "from": "@body('New_failures')",
+          "select": "@item()?['workflow']"
+        }
+      },
+      "Previously_running_workflows": {
+        "type": "Select",
+        "runAfter": {
+          "New_failed_workflows": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "from": "@coalesce(outputs('Previous_status')?['runningNow'], json('[]'))",
+          "select": "@item()?['workflow']"
+        }
+      },
+      "Completed_count_rose": {
+        "type": "Compose",
+        "description": "True when completedToday went up since the previous status.json (same local date), or is above 0 on a new day / first run.",
+        "runAfter": {
+          "Previously_running_workflows": [
+            "Succeeded"
+          ]
+        },
+        "inputs": "@if(equals(substring(body('Parse_status_json')?['generatedAt'], 0, 10), substring(coalesce(outputs('Previous_status')?['generatedAt'], '0000-00-00'), 0, 10)), greater(body('Parse_status_json')?['completedToday'], int(coalesce(outputs('Previous_status')?['completedToday'], 0))), greater(body('Parse_status_json')?['completedToday'], 0))"
+      },
+      "Finished_cleanly_workflows": {
+        "type": "Query",
+        "description": "Workflows that were running at the previous sync and have now stopped without a new failure and without needing attention.",
+        "runAfter": {
+          "Completed_count_rose": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "from": "@body('Previously_running_workflows')",
+          "where": "@and(not(contains(body('Running_workflows'), item())), not(contains(body('New_failed_workflows'), item())), not(contains(body('Need_attention_workflows'), item())))"
+        }
+      },
+      "Raw_status_text": {
+        "type": "Compose",
+        "description": "The file exactly as the app wrote it (also feeds the next run's comparison).",
+        "runAfter": {
+          "Finished_cleanly_workflows": [
+            "Succeeded"
+          ]
+        },
+        "inputs": "@base64ToString(body('Get_status_json_content')?['$content'])"
+      },
+      "Raw_json_for_row": {
+        "type": "Compose",
+        "description": "RawJson for the Snapshot row: the whole file, or '' when it is longer than 63,000 characters (a plain multi-line column holds at most 63,999). Never truncated, because a cut-off JSON text would make the next run's json() fail; an empty RawJson makes the next run behave like a first run.",
+        "runAfter": {
+          "Raw_status_text": [
+            "Succeeded"
+          ]
+        },
+        "inputs": "@if(greater(length(outputs('Raw_status_text')), 63000), '', outputs('Raw_status_text'))"
+      },
+      "Get_open_alerts": {
+        "type": "OpenApiConnection",
+        "runAfter": {
+          "Raw_json_for_row": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "host": {
+            "connectionName": "shared_sharepointonline",
+            "operationId": "GetItems",
+            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+          },
+          "parameters": {
+            "dataset": "__SITE_URL__",
+            "table": "Opossum Alerts",
+            "$filter": "State ne 'Resolved'",
+            "$top": 500
+          }
+        },
+        "runtimeConfiguration": {
+          "paginationPolicy": {
+            "minimumItemCount": 5000
+          }
+        }
+      },
+      "Alerts_to_resolve": {
+        "type": "Query",
+        "description": "Open alerts raised at least 2 minutes before this status.json whose workflow is neither running nor needing attention, and that either were needs-attention alerts or belong to a workflow that has completed since (see flow description).",
+        "runAfter": {
+          "Get_open_alerts": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "from": "@body('Get_open_alerts')?['value']",
+          "where": "@and(less(ticks(coalesce(item()?['At'], '2999-12-31T00:00:00Z')), ticks(addMinutes(body('Parse_status_json')?['generatedAt'], -2))), not(contains(body('Running_workflows'), item()?['Workflow'])), not(contains(body('Need_attention_workflows'), item()?['Workflow'])), or(equals(item()?['Event'], 'run.needsAttention'), and(outputs('Completed_count_rose'), contains(body('Finished_cleanly_workflows'), item()?['Workflow'])), and(outputs('Completed_count_rose'), not(contains(body('Failed_workflows'), item()?['Workflow'])))))"
+        }
+      },
+      "Resolve_each_alert": {
+        "type": "Foreach",
+        "runAfter": {
+          "Alerts_to_resolve": [
+            "Succeeded"
+          ]
+        },
+        "foreach": "@body('Alerts_to_resolve')",
+        "runtimeConfiguration": {
+          "concurrency": {
+            "repetitions": 1
+          }
+        },
+        "actions": {
+          "Mark_alert_resolved": {
+            "type": "OpenApiConnection",
+            "inputs": {
+              "host": {
+                "connectionName": "shared_sharepointonline",
+                "operationId": "PatchItem",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+              },
+              "parameters": {
+                "dataset": "__SITE_URL__",
+                "table": "Opossum Alerts",
+                "id": "@items('Resolve_each_alert')?['ID']",
+                "item/Title": "@items('Resolve_each_alert')?['Title']",
+                "item/EventId": "@items('Resolve_each_alert')?['EventId']",
+                "item/Event": "@items('Resolve_each_alert')?['Event']",
+                "item/Workflow": "@items('Resolve_each_alert')?['Workflow']",
+                "item/Message": "@items('Resolve_each_alert')?['Message']",
+                "item/At": "@items('Resolve_each_alert')?['At']",
+                "item/State/Value": "Resolved",
+                "item/ResolvedAt": "@utcNow()"
+              }
+            }
+          }
+        }
+      },
+      "Upsert_snapshot_row": {
+        "type": "If",
+        "runAfter": {
+          "Resolve_each_alert": [
+            "Succeeded"
+          ]
+        },
+        "expression": {
+          "and": [
+            {
+              "equals": [
+                "@length(body('Get_snapshot_row')?['value'])",
+                0
+              ]
+            }
+          ]
+        },
+        "actions": {
+          "Create_snapshot_row": {
+            "type": "OpenApiConnection",
+            "inputs": {
+              "host": {
+                "connectionName": "shared_sharepointonline",
+                "operationId": "PostItem",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+              },
+              "parameters": {
+                "dataset": "__SITE_URL__",
+                "table": "Opossum Snapshot",
+                "item/Title": "status",
+                "item/Profile": "@take(coalesce(body('Parse_status_json')?['profile'], ''), 50)",
+                "item/GeneratedAt": "@body('Parse_status_json')?['generatedAt']",
+                "item/AppVersion": "@take(coalesce(body('Parse_status_json')?['appVersion'], ''), 50)",
+                "item/CompletedToday": "@body('Parse_status_json')?['completedToday']",
+                "item/FailedCount": "@length(body('Parse_status_json')?['failed'])",
+                "item/FailedSince": "@body('Parse_status_json')?['failedSince']",
+                "item/NeedsAttentionCount": "@length(body('Parse_status_json')?['needsAttention'])",
+                "item/RunningNow": "@length(body('Parse_status_json')?['runningNow'])",
+                "item/NextScheduled": "@if(empty(body('Parse_status_json')?['scheduledToday']), null, first(body('Parse_status_json')?['scheduledToday'])?['at'])",
+                "item/NextScheduledName": "@if(empty(body('Parse_status_json')?['scheduledToday']), '', take(coalesce(first(body('Parse_status_json')?['scheduledToday'])?['workflowName'], first(body('Parse_status_json')?['scheduledToday'])?['workflow'], ''), 255))",
+                "item/RawJson": "@outputs('Raw_json_for_row')"
+              }
+            }
+          }
+        },
+        "else": {
+          "actions": {
+            "Update_snapshot_row": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "PatchItem",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "__SITE_URL__",
+                  "table": "Opossum Snapshot",
+                  "id": "@outputs('Snapshot_row')?['ID']",
+                  "item/Title": "status",
+                  "item/Profile": "@take(coalesce(body('Parse_status_json')?['profile'], ''), 50)",
+                  "item/GeneratedAt": "@body('Parse_status_json')?['generatedAt']",
+                  "item/AppVersion": "@take(coalesce(body('Parse_status_json')?['appVersion'], ''), 50)",
+                  "item/CompletedToday": "@body('Parse_status_json')?['completedToday']",
+                  "item/FailedCount": "@length(body('Parse_status_json')?['failed'])",
+                  "item/FailedSince": "@body('Parse_status_json')?['failedSince']",
+                  "item/NeedsAttentionCount": "@length(body('Parse_status_json')?['needsAttention'])",
+                  "item/RunningNow": "@length(body('Parse_status_json')?['runningNow'])",
+                  "item/NextScheduled": "@if(empty(body('Parse_status_json')?['scheduledToday']), null, first(body('Parse_status_json')?['scheduledToday'])?['at'])",
+                  "item/NextScheduledName": "@if(empty(body('Parse_status_json')?['scheduledToday']), '', take(coalesce(first(body('Parse_status_json')?['scheduledToday'])?['workflowName'], first(body('Parse_status_json')?['scheduledToday'])?['workflow'], ''), 255))",
+                  "item/RawJson": "@outputs('Raw_json_for_row')"
+                }
+              }
+            }
+          }
+        },
+        "description": "Runs last, so a run that fails while resolving alerts can be resubmitted: the stored snapshot (and its generatedAt) only moves on once the alerts are done."
+      }
+    },
+    "outputs": {}
+  }
+}

@@ -1,0 +1,180 @@
+{
+  "displayName": "Opossum · Calendar feed",
+  "description": "Every 15 minutes (Pacific Standard Time) reads the work Outlook calendar view from 12 hours ago to 36 hours ahead and overwrites __ONEDRIVE_FOLDER__/calendar.json in exactly the schemaVersion 1 shape CalendarFileParser accepts: 5 top-level keys (schemaVersion, generatedAt, source, timeZone, events) and 7 keys per event (subject, start, end, isAllDay, location, link, showAs). Timed events use startWithTimeZone/endWithTimeZone (ISO 8601 with offset); all-day events use a bare yyyy-MM-dd date taken from the UTC start/end so the day cannot shift; isAllDay is always a real boolean; link is the https webLink or empty; meetings cancelled by the organizer (subject starts 'Canceled:' or 'Cancelled:') are dropped; at most 500 events. The file is overwritten in place (Update file on the existing id, Create file only when it does not exist yet); no temp-and-rename is needed because the app retries once and treats a half-synced file as 'unavailable', never as an error. Standard connectors only (Office 365 Outlook, OneDrive for Business).",
+  "contract": {
+    "reads": [],
+    "writes": ["calendar.json"],
+    "parseJsonActions": {}
+  },
+  "connectionReferences": {
+    "shared_office365": {
+      "connectionName": "__CONN_shared_office365__",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_office365"
+    },
+    "shared_onedriveforbusiness": {
+      "connectionName": "__CONN_shared_onedriveforbusiness__",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness"
+    }
+  },
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "$connections": { "defaultValue": {}, "type": "Object" },
+      "$authentication": { "defaultValue": {}, "type": "SecureObject" }
+    },
+    "triggers": {
+      "Recurrence": {
+        "type": "Recurrence",
+        "recurrence": {
+          "frequency": "Minute",
+          "interval": 15,
+          "timeZone": "Pacific Standard Time"
+        },
+        "runtimeConfiguration": {
+          "concurrency": {
+            "runs": 1
+          }
+        }
+      }
+    },
+    "actions": {
+      "Get_calendar_view_of_events_(V3)": {
+        "type": "OpenApiConnection",
+        "runAfter": {},
+        "inputs": {
+          "host": {
+            "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+            "connectionName": "shared_office365",
+            "operationId": "GetEventsCalendarViewV3"
+          },
+          "parameters": {
+            "calendarId": "Calendar",
+            "startDateTimeUtc": "@{formatDateTime(addHours(utcNow(), -12), 'yyyy-MM-ddTHH:mm:ss')}",
+            "endDateTimeUtc": "@{formatDateTime(addHours(utcNow(), 36), 'yyyy-MM-ddTHH:mm:ss')}"
+          }
+        }
+      },
+      "Filter_out_cancelled_events": {
+        "type": "Query",
+        "runAfter": {
+          "Get_calendar_view_of_events_(V3)": ["Succeeded"]
+        },
+        "inputs": {
+          "from": "@coalesce(body('Get_calendar_view_of_events_(V3)')?['value'], createArray())",
+          "where": "@not(or(startsWith(coalesce(item()?['subject'], ''), 'Canceled:'), startsWith(coalesce(item()?['subject'], ''), 'Cancelled:')))"
+        }
+      },
+      "Select_calendar_fields": {
+        "type": "Select",
+        "runAfter": {
+          "Filter_out_cancelled_events": ["Succeeded"]
+        },
+        "inputs": {
+          "from": "@take(body('Filter_out_cancelled_events'), 500)",
+          "select": {
+            "subject": "@{item()?['subject']}",
+            "start": "@if(equals(item()?['isAllDay'], true), formatDateTime(item()?['start'], 'yyyy-MM-dd'), item()?['startWithTimeZone'])",
+            "end": "@if(equals(item()?['isAllDay'], true), formatDateTime(item()?['end'], 'yyyy-MM-dd'), item()?['endWithTimeZone'])",
+            "isAllDay": "@equals(item()?['isAllDay'], true)",
+            "location": "@{item()?['location']}",
+            "link": "@if(startsWith(coalesce(item()?['webLink'], ''), 'https://'), item()?['webLink'], '')",
+            "showAs": "@{item()?['showAs']}"
+          }
+        }
+      },
+      "Compose_calendar_json": {
+        "type": "Compose",
+        "runAfter": {
+          "Select_calendar_fields": ["Succeeded"]
+        },
+        "inputs": {
+          "schemaVersion": 1,
+          "generatedAt": "@{utcNow()}",
+          "source": "power-automate",
+          "timeZone": "Pacific Standard Time",
+          "events": "@body('Select_calendar_fields')"
+        }
+      },
+      "Get_calendar_file_metadata": {
+        "type": "OpenApiConnection",
+        "runAfter": {
+          "Compose_calendar_json": ["Succeeded"]
+        },
+        "inputs": {
+          "host": {
+            "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness",
+            "connectionName": "shared_onedriveforbusiness",
+            "operationId": "GetFileMetadataByPath"
+          },
+          "parameters": {
+            "path": "__ONEDRIVE_FOLDER__/calendar.json"
+          }
+        }
+      },
+      "Update_calendar_file": {
+        "type": "OpenApiConnection",
+        "runAfter": {
+          "Get_calendar_file_metadata": ["Succeeded"]
+        },
+        "inputs": {
+          "host": {
+            "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness",
+            "connectionName": "shared_onedriveforbusiness",
+            "operationId": "UpdateFile"
+          },
+          "parameters": {
+            "id": "@body('Get_calendar_file_metadata')?['Id']",
+            "body": "@string(outputs('Compose_calendar_json'))"
+          }
+        }
+      },
+      "If_calendar_file_is_missing": {
+        "type": "If",
+        "description": "Create calendar.json only when the metadata lookup failed because the file does not exist (404). Any other failure (throttling, 5xx) fails the run instead of trying to create a file that already exists; the next 15-minute run retries.",
+        "runAfter": {
+          "Get_calendar_file_metadata": ["Failed"]
+        },
+        "expression": {
+          "and": [
+            { "equals": ["@outputs('Get_calendar_file_metadata')?['statusCode']", 404] }
+          ]
+        },
+        "actions": {
+          "Create_calendar_file": {
+            "type": "OpenApiConnection",
+            "runAfter": {},
+            "inputs": {
+              "host": {
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness",
+                "connectionName": "shared_onedriveforbusiness",
+                "operationId": "CreateFile"
+              },
+              "parameters": {
+                "folderPath": "__ONEDRIVE_FOLDER__",
+                "name": "calendar.json",
+                "body": "@string(outputs('Compose_calendar_json'))"
+              }
+            }
+          }
+        },
+        "else": {
+          "actions": {
+            "Terminate_metadata_lookup_failed": {
+              "type": "Terminate",
+              "runAfter": {},
+              "inputs": {
+                "runStatus": "Failed",
+                "runError": {
+                  "code": "CalendarFileLookupFailed",
+                  "message": "Could not read the metadata of __ONEDRIVE_FOLDER__/calendar.json (not a 404). calendar.json was not written; the next run retries."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "outputs": {}
+  }
+}

@@ -1,0 +1,254 @@
+# Opossum Hub - Alerts screen. Every alert from the PC, newest first. Fixing a workflow still happens on the PC.
+# Data: 'Opossum Alerts' (display names: Title, 'Event ID', Event, Workflow, 'Workflow name', 'Run ID', Step,
+#   Message, At, State (Choice New/Seen/Resolved), 'Resolved at').
+# The only write: "Got it" patches State to Seen. Status sync (a flow) sets Resolved; the Hub never does.
+Screens:
+  AlertsScreen:
+    Properties:
+      Fill: =ColorValue("#f5f5f8")
+      OnVisible: =Refresh('Opossum Alerts')
+    Children:
+      - alrRoot:
+          Control: GroupContainer
+          Variant: AutoLayout
+          Properties:
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height
+            Fill: =ColorValue("#f5f5f8")
+            DropShadow: =DropShadow.None
+            LayoutDirection: =LayoutDirection.Vertical
+            LayoutAlignItems: =LayoutAlignItems.Stretch
+            LayoutGap: =0
+          Children:
+            - alrHeader:
+                Control: GroupContainer
+                Variant: AutoLayout
+                Properties:
+                  Height: =56
+                  FillPortions: =0
+                  Fill: =ColorValue("#ffffff")
+                  BorderColor: =ColorValue("#e2e2ea")
+                  BorderThickness: =1
+                  DropShadow: =DropShadow.None
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutAlignItems: =LayoutAlignItems.Center
+                  LayoutGap: =6
+                  PaddingLeft: =16
+                  PaddingRight: =8
+                Children:
+                  - alrTitle:
+                      Control: ModernText@1.0.0
+                      Properties:
+                        Text: ="Alerts"
+                        Size: =20
+                        FontWeight: =FontWeight.Semibold
+                        Color: =ColorValue("#15151c")
+                        FillPortions: =1
+                        Height: =40
+                  - alrShowOpen:
+                      Control: ModernButton@1.0.0
+                      Properties:
+                        Text: ="Open"
+                        Appearance: =If(locShowAll, ButtonAppearance.Subtle, ButtonAppearance.Secondary)
+                        BasePaletteColor: =ColorValue("#5457c4")
+                        Width: =72
+                        Height: =32
+                        OnSelect: |-
+                          =UpdateContext({locShowAll: false})
+                  - alrShowAll:
+                      Control: ModernButton@1.0.0
+                      Properties:
+                        Text: ="All"
+                        Appearance: =If(locShowAll, ButtonAppearance.Secondary, ButtonAppearance.Subtle)
+                        BasePaletteColor: =ColorValue("#5457c4")
+                        Width: =56
+                        Height: =32
+                        OnSelect: |-
+                          =UpdateContext({locShowAll: true})
+                  - alrRefresh:
+                      Control: ModernButton@1.0.0
+                      Properties:
+                        Text: ="Refresh"
+                        Icon: ="ArrowClockwise"
+                        Layout: =ButtonLayout.IconOnly
+                        AccessibleLabel: ="Refresh"
+                        Appearance: =ButtonAppearance.Subtle
+                        BasePaletteColor: =ColorValue("#5457c4")
+                        Width: =40
+                        Height: =40
+                        OnSelect: =Refresh('Opossum Alerts')
+            - alrEmpty:
+                Control: ModernText@1.0.0
+                Properties:
+                  Visible: =CountRows(alrGallery.AllItems) = 0
+                  Text: =If(locShowAll, "No alerts in the last 90 days.", "Nothing needs you. Resolved alerts are under All.")
+                  Size: =13
+                  Color: =ColorValue("#5d5e6e")
+                  Height: =48
+                  FillPortions: =0
+                  PaddingLeft: =16
+            - alrGallery:
+                Control: Gallery
+                Variant: Vertical
+                Properties:
+                  Items: |-
+                    =Sort(
+                        If(
+                            locShowAll,
+                            'Opossum Alerts',
+                            Filter('Opossum Alerts', State.Value = "New" || State.Value = "Seen")
+                        ),
+                        At,
+                        SortOrder.Descending
+                    )
+                  TemplateSize: =150
+                  TemplatePadding: =8
+                  FillPortions: =1
+                  Fill: =ColorValue("#f5f5f8")
+                  ShowScrollbar: =true
+                Children:
+                  - alrCard:
+                      Control: GroupContainer
+                      Variant: ManualLayout
+                      Properties:
+                        X: =8
+                        Y: =0
+                        Width: =Parent.TemplateWidth - 16
+                        Height: =Parent.TemplateHeight
+                        Fill: =ColorValue("#ffffff")
+                        BorderColor: =If(ThisItem.State.Value = "New", ColorValue("#c22f48"), ColorValue("#e2e2ea"))
+                        BorderThickness: =1
+                        RadiusTopLeft: =12
+                        RadiusTopRight: =12
+                        RadiusBottomLeft: =12
+                        RadiusBottomRight: =12
+                        DropShadow: =DropShadow.None
+                      Children:
+                        - alrItemTitle:
+                            Control: ModernText@1.0.0
+                            Properties:
+                              Text: |-
+                                =Coalesce(ThisItem.'Workflow name', ThisItem.Workflow) & " " &
+                                Switch(ThisItem.Event, "run.failed", "failed", "run.needsAttention", "needs attention", "run.overrun", "ran long", ThisItem.Event)
+                              Size: =15
+                              FontWeight: =FontWeight.Semibold
+                              Color: =ColorValue("#15151c")
+                              X: =14
+                              Y: =10
+                              Width: =Parent.Width - 120
+                              Height: =28
+                        - alrItemState:
+                            Control: ModernText@1.0.0
+                            Properties:
+                              Text: =ThisItem.State.Value
+                              Size: =12
+                              FontWeight: =FontWeight.Semibold
+                              Align: =Align.Center
+                              Color: |-
+                                =Switch(ThisItem.State.Value, "New", ColorValue("#c22f48"), "Seen", ColorValue("#a85a00"), ColorValue("#1f7a48"))
+                              Fill: |-
+                                =Switch(ThisItem.State.Value, "New", ColorValue("#fbe8eb"), "Seen", ColorValue("#fcefdf"), ColorValue("#e4f3ea"))
+                              RadiusTopLeft: =10
+                              RadiusTopRight: =10
+                              RadiusBottomLeft: =10
+                              RadiusBottomRight: =10
+                              X: =Parent.Width - 96
+                              Y: =12
+                              Width: =82
+                              Height: =24
+                        - alrItemMessage:
+                            Control: ModernText@1.0.0
+                            Properties:
+                              Text: =ThisItem.Message
+                              Size: =13
+                              Wrap: =true
+                              VerticalAlign: =VerticalAlign.Top
+                              Color: =ColorValue("#15151c")
+                              X: =14
+                              Y: =40
+                              Width: =Parent.Width - 28
+                              Height: =40
+                        - alrItemMeta:
+                            Control: ModernText@1.0.0
+                            Properties:
+                              Text: |-
+                                =If(IsBlank(ThisItem.Step), "", "step " & ThisItem.Step & " · ") & Text(ThisItem.At, "ddd h:mm AM/PM") &
+                                If(ThisItem.State.Value = "Resolved" && !IsBlank(ThisItem.'Resolved at'), " · resolved " & Text(ThisItem.'Resolved at', "ddd h:mm AM/PM"), "")
+                              Size: =12
+                              Color: =ColorValue("#8a8b9c")
+                              X: =14
+                              Y: =82
+                              Width: =Parent.Width - 28
+                              Height: =22
+                        - alrGotIt:
+                            Control: ModernButton@1.0.0
+                            Properties:
+                              Visible: =ThisItem.State.Value = "New"
+                              Text: ="Got it"
+                              AccessibleLabel: ="Mark this alert as seen"
+                              Appearance: =ButtonAppearance.Primary
+                              BasePaletteColor: =ColorValue("#5457c4")
+                              X: =14
+                              Y: =Parent.Height - 44
+                              Width: =96
+                              Height: =32
+                              OnSelect: |-
+                                =IfError(
+                                    Patch('Opossum Alerts', ThisItem, {State: {Value: "Seen"}}),
+                                    Notify("Couldn't mark it seen: " & FirstError.Message, NotificationType.Error)
+                                )
+            - alrNav:
+                Control: GroupContainer
+                Variant: AutoLayout
+                Properties:
+                  Height: =60
+                  FillPortions: =0
+                  Fill: =ColorValue("#ffffff")
+                  BorderColor: =ColorValue("#e2e2ea")
+                  BorderThickness: =1
+                  DropShadow: =DropShadow.None
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutAlignItems: =LayoutAlignItems.Center
+                  LayoutGap: =4
+                  PaddingLeft: =8
+                  PaddingRight: =8
+                Children:
+                  - alrNavNow:
+                      Control: ModernButton@1.0.0
+                      Properties:
+                        Text: ="Now"
+                        Appearance: =ButtonAppearance.Subtle
+                        BasePaletteColor: =ColorValue("#5457c4")
+                        FillPortions: =1
+                        Height: =40
+                        OnSelect: =Navigate(NowScreen)
+                  - alrNavAlerts:
+                      Control: ModernButton@1.0.0
+                      Properties:
+                        Text: |-
+                          =With({n: CountRows(Filter('Opossum Alerts', State.Value = "New"))}, "Alerts" & If(n > 0, " " & n, ""))
+                        Appearance: =ButtonAppearance.Primary
+                        BasePaletteColor: =ColorValue("#5457c4")
+                        FillPortions: =1
+                        Height: =40
+                        OnSelect: =Navigate(AlertsScreen)
+                  - alrNavAsks:
+                      Control: ModernButton@1.0.0
+                      Properties:
+                        Text: ="Asks"
+                        Appearance: =ButtonAppearance.Subtle
+                        BasePaletteColor: =ColorValue("#5457c4")
+                        FillPortions: =1
+                        Height: =40
+                        OnSelect: =Navigate(AsksScreen)
+                  - alrNavDay:
+                      Control: ModernButton@1.0.0
+                      Properties:
+                        Text: ="Day"
+                        Appearance: =ButtonAppearance.Subtle
+                        BasePaletteColor: =ColorValue("#5457c4")
+                        FillPortions: =1
+                        Height: =40
+                        OnSelect: =Navigate(DayScreen)

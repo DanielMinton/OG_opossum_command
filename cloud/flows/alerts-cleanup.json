@@ -1,0 +1,291 @@
+{
+  "displayName": "Opossum · Alerts cleanup",
+  "description": "Monthly (1st of the month, 03:00 Pacific): delete 'Opossum Alerts' rows whose At is older than 90 days and 'Opossum Wraps' rows whose Date is older than 365 days. Each list is cleaned in a bounded loop (100 rows per pass, at most 60 passes or 1 hour) that re-queries after every pass, deleting one row at a time. One run at a time. The Wraps pass runs even if the Alerts pass failed; the run is marked Failed if either did.",
+  "contract": {
+    "reads": [],
+    "writes": [],
+    "parseJsonActions": {}
+  },
+  "connectionReferences": {
+    "shared_sharepointonline": {
+      "connectionName": "__CONN_shared_sharepointonline__",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+    }
+  },
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "$connections": {
+        "defaultValue": {},
+        "type": "Object"
+      },
+      "$authentication": {
+        "defaultValue": {},
+        "type": "SecureObject"
+      }
+    },
+    "triggers": {
+      "Monthly": {
+        "type": "Recurrence",
+        "recurrence": {
+          "frequency": "Month",
+          "interval": 1,
+          "startTime": "2026-11-01T03:00:00",
+          "timeZone": "Pacific Standard Time"
+        },
+        "runtimeConfiguration": {
+          "concurrency": {
+            "runs": 1
+          }
+        }
+      }
+    },
+    "actions": {
+      "Alerts_cutoff": {
+        "type": "Compose",
+        "description": "UTC instant 90 days ago, fixed for the whole run.",
+        "runAfter": {},
+        "inputs": "@formatDateTime(addDays(utcNow(), -90), 'yyyy-MM-ddTHH:mm:ssZ')"
+      },
+      "Wraps_cutoff": {
+        "type": "Compose",
+        "description": "Pacific date 365 days ago, fixed for the whole run.",
+        "runAfter": {
+          "Alerts_cutoff": [
+            "Succeeded"
+          ]
+        },
+        "inputs": "@formatDateTime(addDays(convertFromUtc(utcNow(), 'Pacific Standard Time'), -365), 'yyyy-MM-dd')"
+      },
+      "Initialize_alerts_deleted": {
+        "type": "InitializeVariable",
+        "runAfter": {
+          "Wraps_cutoff": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "variables": [
+            {
+              "name": "AlertsDeleted",
+              "type": "integer",
+              "value": 0
+            }
+          ]
+        }
+      },
+      "Initialize_wraps_deleted": {
+        "type": "InitializeVariable",
+        "runAfter": {
+          "Initialize_alerts_deleted": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "variables": [
+            {
+              "name": "WrapsDeleted",
+              "type": "integer",
+              "value": 0
+            }
+          ]
+        }
+      },
+      "Delete_old_alerts": {
+        "type": "Until",
+        "runAfter": {
+          "Initialize_wraps_deleted": [
+            "Succeeded"
+          ]
+        },
+        "expression": "@equals(length(coalesce(body('Get_old_alerts')?['value'], json('[]'))), 0)",
+        "limit": {
+          "count": 60,
+          "timeout": "PT1H"
+        },
+        "actions": {
+          "Get_old_alerts": {
+            "type": "OpenApiConnection",
+            "inputs": {
+              "host": {
+                "connectionName": "shared_sharepointonline",
+                "operationId": "GetItems",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+              },
+              "parameters": {
+                "dataset": "__SITE_URL__",
+                "table": "Opossum Alerts",
+                "$filter": "At lt '@{outputs('Alerts_cutoff')}'",
+                "$orderby": "ID asc",
+                "$top": 100
+              }
+            }
+          },
+          "Delete_each_old_alert": {
+            "type": "Foreach",
+            "runAfter": {
+              "Get_old_alerts": [
+                "Succeeded"
+              ]
+            },
+            "foreach": "@body('Get_old_alerts')?['value']",
+            "runtimeConfiguration": {
+              "concurrency": {
+                "repetitions": 1
+              }
+            },
+            "actions": {
+              "Delete_alert_row": {
+                "type": "OpenApiConnection",
+                "inputs": {
+                  "host": {
+                    "connectionName": "shared_sharepointonline",
+                    "operationId": "DeleteItem",
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                  },
+                  "parameters": {
+                    "dataset": "__SITE_URL__",
+                    "table": "Opossum Alerts",
+                    "id": "@items('Delete_each_old_alert')?['ID']"
+                  }
+                }
+              },
+              "Count_alert_deleted": {
+                "type": "IncrementVariable",
+                "runAfter": {
+                  "Delete_alert_row": [
+                    "Succeeded"
+                  ]
+                },
+                "inputs": {
+                  "name": "AlertsDeleted",
+                  "value": 1
+                }
+              }
+            }
+          }
+        }
+      },
+      "Delete_old_wraps": {
+        "type": "Until",
+        "runAfter": {
+          "Delete_old_alerts": [
+            "Succeeded",
+            "Failed",
+            "TimedOut"
+          ]
+        },
+        "expression": "@equals(length(coalesce(body('Get_old_wraps')?['value'], json('[]'))), 0)",
+        "limit": {
+          "count": 60,
+          "timeout": "PT1H"
+        },
+        "actions": {
+          "Get_old_wraps": {
+            "type": "OpenApiConnection",
+            "inputs": {
+              "host": {
+                "connectionName": "shared_sharepointonline",
+                "operationId": "GetItems",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+              },
+              "parameters": {
+                "dataset": "__SITE_URL__",
+                "table": "Opossum Wraps",
+                "$filter": "Date lt '@{outputs('Wraps_cutoff')}'",
+                "$orderby": "ID asc",
+                "$top": 100
+              }
+            }
+          },
+          "Delete_each_old_wrap": {
+            "type": "Foreach",
+            "runAfter": {
+              "Get_old_wraps": [
+                "Succeeded"
+              ]
+            },
+            "foreach": "@body('Get_old_wraps')?['value']",
+            "runtimeConfiguration": {
+              "concurrency": {
+                "repetitions": 1
+              }
+            },
+            "actions": {
+              "Delete_wrap_row": {
+                "type": "OpenApiConnection",
+                "inputs": {
+                  "host": {
+                    "connectionName": "shared_sharepointonline",
+                    "operationId": "DeleteItem",
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                  },
+                  "parameters": {
+                    "dataset": "__SITE_URL__",
+                    "table": "Opossum Wraps",
+                    "id": "@items('Delete_each_old_wrap')?['ID']"
+                  }
+                }
+              },
+              "Count_wrap_deleted": {
+                "type": "IncrementVariable",
+                "runAfter": {
+                  "Delete_wrap_row": [
+                    "Succeeded"
+                  ]
+                },
+                "inputs": {
+                  "name": "WrapsDeleted",
+                  "value": 1
+                }
+              }
+            }
+          }
+        }
+      },
+      "Check_cleanup_result": {
+        "type": "If",
+        "runAfter": {
+          "Delete_old_wraps": [
+            "Succeeded",
+            "Failed",
+            "TimedOut"
+          ]
+        },
+        "expression": {
+          "and": [
+            {
+              "equals": [
+                "@actions('Delete_old_alerts')?['status']",
+                "Succeeded"
+              ]
+            },
+            {
+              "equals": [
+                "@actions('Delete_old_wraps')?['status']",
+                "Succeeded"
+              ]
+            }
+          ]
+        },
+        "actions": {},
+        "else": {
+          "actions": {
+            "Terminate_cleanup_failed": {
+              "type": "Terminate",
+              "inputs": {
+                "runStatus": "Failed",
+                "runError": {
+                  "code": "CleanupIncomplete",
+                  "message": "Cleanup did not finish: alerts loop @{actions('Delete_old_alerts')?['status']} (@{variables('AlertsDeleted')} deleted), wraps loop @{actions('Delete_old_wraps')?['status']} (@{variables('WrapsDeleted')} deleted)."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "outputs": {}
+  }
+}

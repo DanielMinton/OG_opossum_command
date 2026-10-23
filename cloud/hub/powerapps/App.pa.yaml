@@ -1,0 +1,6 @@
+# Opossum Hub - App object. Studio's Paste code can't paste the App object, so set this one property by hand:
+# Tree view -> App -> property StartScreen -> NowScreen. Nothing else is needed on App: each screen loads its
+# own data in OnVisible, and every color is written on the controls themselves.
+App:
+  Properties:
+    StartScreen: =NowScreen

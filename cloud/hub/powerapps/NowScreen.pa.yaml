@@ -1,0 +1,418 @@
+# Opossum Hub - Now screen (the glance screen). Read only: no button here changes data.
+# Data: 'Opossum Snapshot' (one row, Title = "status") and 'Opossum Wraps' (latest row, for carryovers).
+# Column names below are the lists' DISPLAY names (Power Apps uses display names), from cloud/lists/*.json.
+# Palette (blueprint, light): bg #f5f5f8, surface #ffffff, ink #15151c, muted #5d5e6e, line #e2e2ea,
+#   accent #5457c4, accent-soft #ebebfa, bad #c22f48 / #fbe8eb, warn #a85a00 / #fcefdf, ok #1f7a48 / #e4f3ea.
+Screens:
+  NowScreen:
+    Properties:
+      Fill: =ColorValue("#f5f5f8")
+      OnVisible: |-
+        =Refresh('Opossum Snapshot');
+        Refresh('Opossum Wraps');
+        Set(gSnap, LookUp('Opossum Snapshot', Title = "status"));
+        With(
+            {j: ParseJSON(Coalesce(gSnap.'Raw JSON', "{""needsAttention"":[],""scheduledToday"":[]}"))},
+            Set(gNeeds, ForAll(Table(j.needsAttention), {WorkflowName: Text(ThisRecord.Value.workflowName), Step: Text(ThisRecord.Value.step), Reason: Text(ThisRecord.Value.reason)}));
+            Set(gNext, ForAll(Table(j.scheduledToday), {WorkflowName: Text(ThisRecord.Value.workflowName), At: DateTimeValue(Text(ThisRecord.Value.at))}))
+        );
+        Set(gLastWrap, First(Sort('Opossum Wraps', ThisRecord.Date, SortOrder.Descending)))
+    Children:
+      - nowRoot:
+          Control: GroupContainer
+          Variant: AutoLayout
+          Properties:
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height
+            Fill: =ColorValue("#f5f5f8")
+            DropShadow: =DropShadow.None
+            LayoutDirection: =LayoutDirection.Vertical
+            LayoutAlignItems: =LayoutAlignItems.Stretch
+            LayoutGap: =0
+          Children:
+            - nowHeader:
+                Control: GroupContainer
+                Variant: AutoLayout
+                Properties:
+                  Height: =56
+                  FillPortions: =0
+                  Fill: =ColorValue("#ffffff")
+                  BorderColor: =ColorValue("#e2e2ea")
+                  BorderThickness: =1
+                  DropShadow: =DropShadow.None
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutAlignItems: =LayoutAlignItems.Center
+                  LayoutGap: =8
+                  PaddingLeft: =16
+                  PaddingRight: =8
+                Children:
+                  - nowTitle:
+                      Control: ModernText@1.0.0
+                      Properties:
+                        Text: ="Now"
+                        Size: =20
+                        FontWeight: =FontWeight.Semibold
+                        Color: =ColorValue("#15151c")
+                        FillPortions: =1
+                        Height: =40
+                  - nowSeen:
+                      Control: ModernText@1.0.0
+                      Properties:
+                        Text: |-
+                          =If(IsBlank(gSnap), "PC not seen yet", "PC seen " & Text(gSnap.'Generated at', "h:mm AM/PM"))
+                        Size: =13
+                        Align: =Align.Right
+                        Width: =150
+                        Height: =32
+                        Color: |-
+                          =If(
+                              IsBlank(gSnap) || (
+                                  DateDiff(gSnap.'Generated at', Now(), TimeUnit.Minutes) > 30 &&
+                                  Weekday(Now(), StartOfWeek.Monday) <= 5 &&
+                                  Hour(Now()) >= 7 && Hour(Now()) < 18
+                              ),
+                              ColorValue("#a85a00"),
+                              ColorValue("#5d5e6e")
+                          )
+                  - nowRefresh:
+                      Control: ModernButton@1.0.0
+                      Properties:
+                        Text: ="Refresh"
+                        Icon: ="ArrowClockwise"
+                        Layout: =ButtonLayout.IconOnly
+                        AccessibleLabel: ="Refresh"
+                        Appearance: =ButtonAppearance.Subtle
+                        BasePaletteColor: =ColorValue("#5457c4")
+                        Width: =40
+                        Height: =40
+                        OnSelect: |-
+                          =Refresh('Opossum Snapshot');
+                          Refresh('Opossum Wraps');
+                          Set(gSnap, LookUp('Opossum Snapshot', Title = "status"));
+                          With(
+                              {j: ParseJSON(Coalesce(gSnap.'Raw JSON', "{""needsAttention"":[],""scheduledToday"":[]}"))},
+                              Set(gNeeds, ForAll(Table(j.needsAttention), {WorkflowName: Text(ThisRecord.Value.workflowName), Step: Text(ThisRecord.Value.step), Reason: Text(ThisRecord.Value.reason)}));
+                              Set(gNext, ForAll(Table(j.scheduledToday), {WorkflowName: Text(ThisRecord.Value.workflowName), At: DateTimeValue(Text(ThisRecord.Value.at))}))
+                          );
+                          Set(gLastWrap, First(Sort('Opossum Wraps', ThisRecord.Date, SortOrder.Descending)))
+            - nowBody:
+                Control: GroupContainer
+                Variant: AutoLayout
+                Properties:
+                  FillPortions: =1
+                  Fill: =ColorValue("#f5f5f8")
+                  DropShadow: =DropShadow.None
+                  LayoutDirection: =LayoutDirection.Vertical
+                  LayoutAlignItems: =LayoutAlignItems.Stretch
+                  LayoutOverflowY: =LayoutOverflow.Scroll
+                  LayoutGap: =12
+                  PaddingTop: =16
+                  PaddingBottom: =16
+                  PaddingLeft: =16
+                  PaddingRight: =16
+                Children:
+                  - nowBanner:
+                      Control: GroupContainer
+                      Variant: AutoLayout
+                      Properties:
+                        Visible: =Coalesce(gSnap.'Needs attention', 0) > 0
+                        Height: =76
+                        FillPortions: =0
+                        Fill: =ColorValue("#fbe8eb")
+                        BorderColor: =ColorValue("#c22f48")
+                        BorderThickness: =1
+                        RadiusTopLeft: =12
+                        RadiusTopRight: =12
+                        RadiusBottomLeft: =12
+                        RadiusBottomRight: =12
+                        DropShadow: =DropShadow.None
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutAlignItems: =LayoutAlignItems.Stretch
+                        PaddingTop: =10
+                        PaddingBottom: =10
+                        PaddingLeft: =14
+                        PaddingRight: =14
+                      Children:
+                        - nowBannerTitle:
+                            Control: ModernText@1.0.0
+                            Properties:
+                              Text: |-
+                                =With({n: Coalesce(gSnap.'Needs attention', 0)}, n & If(n = 1, " workflow needs you", " workflows need you"))
+                              Size: =16
+                              FontWeight: =FontWeight.Semibold
+                              Color: =ColorValue("#c22f48")
+                              Height: =28
+                              OnSelect: =Navigate(AlertsScreen)
+                        - nowBannerDetail:
+                            Control: ModernText@1.0.0
+                            Properties:
+                              Text: |-
+                                =With(
+                                    {f: First(gNeeds)},
+                                    If(IsBlank(f.WorkflowName), "Resume or Dismiss it in the app on the PC.", f.WorkflowName & If(IsBlank(f.Step), "", " stopped at " & f.Step))
+                                )
+                              Size: =13
+                              Color: =ColorValue("#15151c")
+                              Height: =24
+                              OnSelect: =Navigate(AlertsScreen)
+                  - nowTiles:
+                      Control: GroupContainer
+                      Variant: AutoLayout
+                      Properties:
+                        Height: =92
+                        FillPortions: =0
+                        Fill: =RGBA(0, 0, 0, 0)
+                        DropShadow: =DropShadow.None
+                        LayoutDirection: =LayoutDirection.Horizontal
+                        LayoutAlignItems: =LayoutAlignItems.Stretch
+                        LayoutGap: =10
+                      Children:
+                        - nowTileDone:
+                            Control: GroupContainer
+                            Variant: AutoLayout
+                            Properties:
+                              FillPortions: =1
+                              Fill: =ColorValue("#ffffff")
+                              BorderColor: =ColorValue("#e2e2ea")
+                              BorderThickness: =1
+                              RadiusTopLeft: =12
+                              RadiusTopRight: =12
+                              RadiusBottomLeft: =12
+                              RadiusBottomRight: =12
+                              DropShadow: =DropShadow.None
+                              LayoutDirection: =LayoutDirection.Vertical
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              PaddingTop: =10
+                              PaddingLeft: =12
+                              PaddingRight: =12
+                            Children:
+                              - nowDoneNum:
+                                  Control: ModernText@1.0.0
+                                  Properties:
+                                    Text: =Text(Coalesce(gSnap.'Completed today', 0))
+                                    Size: =26
+                                    FontWeight: =FontWeight.Semibold
+                                    Color: =ColorValue("#1f7a48")
+                                    Height: =40
+                              - nowDoneLbl:
+                                  Control: ModernText@1.0.0
+                                  Properties:
+                                    Text: ="done today"
+                                    Size: =12
+                                    Color: =ColorValue("#5d5e6e")
+                                    Height: =24
+                        - nowTileFailed:
+                            Control: GroupContainer
+                            Variant: AutoLayout
+                            Properties:
+                              FillPortions: =1
+                              Fill: =ColorValue("#ffffff")
+                              BorderColor: =ColorValue("#e2e2ea")
+                              BorderThickness: =1
+                              RadiusTopLeft: =12
+                              RadiusTopRight: =12
+                              RadiusBottomLeft: =12
+                              RadiusBottomRight: =12
+                              DropShadow: =DropShadow.None
+                              LayoutDirection: =LayoutDirection.Vertical
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              PaddingTop: =10
+                              PaddingLeft: =12
+                              PaddingRight: =12
+                            Children:
+                              - nowFailedNum:
+                                  Control: ModernText@1.0.0
+                                  Properties:
+                                    Text: =Text(Coalesce(gSnap.'Failed (24 h)', 0))
+                                    Size: =26
+                                    FontWeight: =FontWeight.Semibold
+                                    Color: =If(Coalesce(gSnap.'Failed (24 h)', 0) > 0, ColorValue("#c22f48"), ColorValue("#15151c"))
+                                    Height: =40
+                              - nowFailedLbl:
+                                  Control: ModernText@1.0.0
+                                  Properties:
+                                    Text: ="failed (24 h)"
+                                    Size: =12
+                                    Color: =ColorValue("#5d5e6e")
+                                    Height: =24
+                        - nowTileRunning:
+                            Control: GroupContainer
+                            Variant: AutoLayout
+                            Properties:
+                              FillPortions: =1
+                              Fill: =ColorValue("#ffffff")
+                              BorderColor: =ColorValue("#e2e2ea")
+                              BorderThickness: =1
+                              RadiusTopLeft: =12
+                              RadiusTopRight: =12
+                              RadiusBottomLeft: =12
+                              RadiusBottomRight: =12
+                              DropShadow: =DropShadow.None
+                              LayoutDirection: =LayoutDirection.Vertical
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              PaddingTop: =10
+                              PaddingLeft: =12
+                              PaddingRight: =12
+                            Children:
+                              - nowRunningNum:
+                                  Control: ModernText@1.0.0
+                                  Properties:
+                                    Text: =Text(Coalesce(gSnap.'Running now', 0))
+                                    Size: =26
+                                    FontWeight: =FontWeight.Semibold
+                                    Color: =ColorValue("#5457c4")
+                                    Height: =40
+                              - nowRunningLbl:
+                                  Control: ModernText@1.0.0
+                                  Properties:
+                                    Text: ="running"
+                                    Size: =12
+                                    Color: =ColorValue("#5d5e6e")
+                                    Height: =24
+                  - nowNextHead:
+                      Control: ModernText@1.0.0
+                      Properties:
+                        Text: ="Next on the PC"
+                        Size: =14
+                        FontWeight: =FontWeight.Semibold
+                        Color: =ColorValue("#15151c")
+                        Height: =28
+                  - nowNextEmpty:
+                      Control: ModernText@1.0.0
+                      Properties:
+                        Visible: =CountRows(gNext) = 0
+                        Text: |-
+                          =If(IsBlank(gSnap.'Next scheduled workflow'), "Nothing else scheduled today.", gSnap.'Next scheduled workflow' & " scheduled " & Text(gSnap.'Next scheduled', "h:mm AM/PM"))
+                        Size: =13
+                        Color: =ColorValue("#5d5e6e")
+                        Height: =28
+                  - nowNextGallery:
+                      Control: Gallery
+                      Variant: Vertical
+                      Properties:
+                        Visible: =CountRows(gNext) > 0
+                        Items: =FirstN(gNext, 3)
+                        TemplateSize: =48
+                        TemplatePadding: =0
+                        Height: =Min(CountRows(gNext), 3) * 48
+                        FillPortions: =0
+                        Fill: =ColorValue("#ffffff")
+                        BorderColor: =ColorValue("#e2e2ea")
+                        BorderThickness: =1
+                        ShowScrollbar: =false
+                      Children:
+                        - nowNextName:
+                            Control: ModernText@1.0.0
+                            Properties:
+                              Text: =ThisItem.WorkflowName
+                              Size: =14
+                              Color: =ColorValue("#15151c")
+                              X: =12
+                              Y: =0
+                              Width: =Parent.TemplateWidth - 132
+                              Height: =Parent.TemplateHeight
+                        - nowNextAt:
+                            Control: ModernText@1.0.0
+                            Properties:
+                              Text: =Text(ThisItem.At, "h:mm AM/PM")
+                              Size: =13
+                              Align: =Align.Right
+                              Color: =ColorValue("#5d5e6e")
+                              X: =Parent.TemplateWidth - 120
+                              Y: =0
+                              Width: =108
+                              Height: =Parent.TemplateHeight
+                  - nowCarryHead:
+                      Control: ModernText@1.0.0
+                      Properties:
+                        Text: ="Carried over from yesterday"
+                        Size: =14
+                        FontWeight: =FontWeight.Semibold
+                        Color: =ColorValue("#15151c")
+                        Height: =28
+                  - nowCarryText:
+                      Control: ModernText@1.0.0
+                      Properties:
+                        Text: |-
+                          =If(
+                              !IsBlank(gLastWrap) && gLastWrap.'For date' = Today() && !IsBlank(gLastWrap.Tomorrow),
+                              gLastWrap.Tomorrow,
+                              "No carryovers for today."
+                          )
+                        Size: =13
+                        Wrap: =true
+                        AutoHeight: =true
+                        Color: =ColorValue("#15151c")
+                        Fill: =ColorValue("#ffffff")
+                        BorderColor: =ColorValue("#e2e2ea")
+                        BorderThickness: =1
+                        RadiusTopLeft: =12
+                        RadiusTopRight: =12
+                        RadiusBottomLeft: =12
+                        RadiusBottomRight: =12
+                        PaddingTop: =10
+                        PaddingBottom: =10
+                        PaddingLeft: =12
+                        PaddingRight: =12
+                  - nowFootnote:
+                      Control: ModernText@1.0.0
+                      Properties:
+                        Text: ="Read only. The Hub never starts anything on the PC."
+                        Size: =11
+                        Color: =ColorValue("#8a8b9c")
+                        Height: =24
+            - nowNav:
+                Control: GroupContainer
+                Variant: AutoLayout
+                Properties:
+                  Height: =60
+                  FillPortions: =0
+                  Fill: =ColorValue("#ffffff")
+                  BorderColor: =ColorValue("#e2e2ea")
+                  BorderThickness: =1
+                  DropShadow: =DropShadow.None
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutAlignItems: =LayoutAlignItems.Center
+                  LayoutGap: =4
+                  PaddingLeft: =8
+                  PaddingRight: =8
+                Children:
+                  - nowNavNow:
+                      Control: ModernButton@1.0.0
+                      Properties:
+                        Text: ="Now"
+                        Appearance: =ButtonAppearance.Primary
+                        BasePaletteColor: =ColorValue("#5457c4")
+                        FillPortions: =1
+                        Height: =40
+                        OnSelect: =Navigate(NowScreen)
+                  - nowNavAlerts:
+                      Control: ModernButton@1.0.0
+                      Properties:
+                        Text: |-
+                          =With({n: CountRows(Filter('Opossum Alerts', State.Value = "New"))}, "Alerts" & If(n > 0, " " & n, ""))
+                        Appearance: =ButtonAppearance.Subtle
+                        BasePaletteColor: =ColorValue("#5457c4")
+                        FillPortions: =1
+                        Height: =40
+                        OnSelect: =Navigate(AlertsScreen)
+                  - nowNavAsks:
+                      Control: ModernButton@1.0.0
+                      Properties:
+                        Text: ="Asks"
+                        Appearance: =ButtonAppearance.Subtle
+                        BasePaletteColor: =ColorValue("#5457c4")
+                        FillPortions: =1
+                        Height: =40
+                        OnSelect: =Navigate(AsksScreen)
+                  - nowNavDay:
+                      Control: ModernButton@1.0.0
+                      Properties:
+                        Text: ="Day"
+                        Appearance: =ButtonAppearance.Subtle
+                        BasePaletteColor: =ColorValue("#5457c4")
+                        FillPortions: =1
+                        Height: =40
+                        OnSelect: =Navigate(DayScreen)

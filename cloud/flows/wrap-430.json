@@ -1,0 +1,632 @@
+{
+  "displayName": "Opossum · 4:30 Wrap",
+  "description": "Weekdays at 16:30 Pacific Standard Time. Reads __ONEDRIVE_FOLDER__/status.json (schemaVersion 1, written by the app; optional), the open and completed tasks of the user's Microsoft To Do (Business) list named 'Requests' (filled by the Request Catcher), and the user's Outlook calendar from the start of today to the end of the next working day. Composes a five-line plain-text wrap (Done, Open, Overdue, Waiting, Tomorrow), posts it to __USER_UPN__ as the Flow bot (Chat with Flow bot), saves it as the 'Opossum Wraps' row for today's Pacific date (looked up with $filter Title eq 'yyyy-MM-dd', the same text this flow writes to Title, and patched if a re-run finds it, created otherwise), and overwrites __ONEDRIVE_FOLDER__/tomorrow.json in exactly the schemaVersion 1 shape CarryoverFileParser accepts: 4 top-level keys (schemaVersion 1, forDate = next working day yyyy-MM-dd with Friday -> Monday, generatedAt = utcNow() with Z, items) and 4 keys per item (title trimmed, NUL removed, never blank, at most 200 characters; source 'email' for tasks the Request Catcher created, else 'todo'; due '' or yyyy-MM-dd; note '' or a short fixed phrase), at most 10 items (overdue first, then dated, then undated). The Teams post, the Wraps row and the file write run in parallel branches so one failing does not block the others; the file write is skipped when reading To Do failed, so a To Do outage never wipes the carryovers. No AI step, no premium connector: OneDrive for Business, Microsoft To Do (Business), Office 365 Outlook, SharePoint, Microsoft Teams. Nothing leaves the work tenant.",
+  "contract": {
+    "reads": ["status.json"],
+    "writes": ["tomorrow.json"],
+    "parseJsonActions": {
+      "status.json": "Parse_status_json"
+    }
+  },
+  "connectionReferences": {
+    "shared_onedriveforbusiness": {
+      "connectionName": "__CONN_shared_onedriveforbusiness__",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness"
+    },
+    "shared_todo": {
+      "connectionName": "__CONN_shared_todo__",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_todo"
+    },
+    "shared_office365": {
+      "connectionName": "__CONN_shared_office365__",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_office365"
+    },
+    "shared_sharepointonline": {
+      "connectionName": "__CONN_shared_sharepointonline__",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+    },
+    "shared_teams": {
+      "connectionName": "__CONN_shared_teams__",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_teams"
+    }
+  },
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "$connections": { "defaultValue": {}, "type": "Object" },
+      "$authentication": { "defaultValue": {}, "type": "SecureObject" }
+    },
+    "triggers": {
+      "Recurrence": {
+        "type": "Recurrence",
+        "recurrence": {
+          "frequency": "Week",
+          "interval": 1,
+          "timeZone": "Pacific Standard Time",
+          "schedule": {
+            "weekDays": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+            "hours": ["16"],
+            "minutes": [30]
+          }
+        }
+      }
+    },
+    "actions": {
+      "Init_StatusDoc": {
+        "type": "InitializeVariable",
+        "runAfter": {},
+        "inputs": { "variables": [ { "name": "StatusDoc", "type": "object", "value": {} } ] }
+      },
+      "Init_StatusOk": {
+        "type": "InitializeVariable",
+        "runAfter": { "Init_StatusDoc": ["Succeeded"] },
+        "inputs": { "variables": [ { "name": "StatusOk", "type": "boolean", "value": false } ] }
+      },
+      "Init_RequestsFound": {
+        "type": "InitializeVariable",
+        "runAfter": { "Init_StatusOk": ["Succeeded"] },
+        "inputs": { "variables": [ { "name": "RequestsFound", "type": "boolean", "value": false } ] }
+      },
+      "Init_Tasks": {
+        "type": "InitializeVariable",
+        "runAfter": { "Init_RequestsFound": ["Succeeded"] },
+        "inputs": { "variables": [ { "name": "Tasks", "type": "array", "value": [] } ] }
+      },
+      "Init_Events": {
+        "type": "InitializeVariable",
+        "runAfter": { "Init_Tasks": ["Succeeded"] },
+        "inputs": { "variables": [ { "name": "Events", "type": "array", "value": [] } ] }
+      },
+      "Today_local": {
+        "type": "Compose",
+        "runAfter": { "Init_Events": ["Succeeded"] },
+        "inputs": "@formatDateTime(convertFromUtc(utcNow(), 'Pacific Standard Time'), 'yyyy-MM-dd')"
+      },
+      "Next_workday": {
+        "type": "Compose",
+        "runAfter": { "Today_local": ["Succeeded"] },
+        "inputs": "@formatDateTime(addDays(convertFromUtc(utcNow(), 'Pacific Standard Time'), if(equals(dayOfWeek(convertFromUtc(utcNow(), 'Pacific Standard Time')), 5), 3, 1)), 'yyyy-MM-dd')"
+      },
+      "Read_status": {
+        "type": "Scope",
+        "runAfter": { "Next_workday": ["Succeeded"] },
+        "actions": {
+          "Get_status_json": {
+            "type": "OpenApiConnection",
+            "runAfter": {},
+            "inputs": {
+              "host": {
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness",
+                "connectionName": "shared_onedriveforbusiness",
+                "operationId": "GetFileContentByPath"
+              },
+              "parameters": {
+                "path": "__ONEDRIVE_FOLDER__/status.json",
+                "inferContentType": false
+              }
+            }
+          },
+          "Parse_status_json": {
+            "type": "ParseJson",
+            "runAfter": { "Get_status_json": ["Succeeded"] },
+            "inputs": {
+              "content": "@json(base64ToString(body('Get_status_json')?['$content']))",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "schemaVersion": { "type": "integer" },
+                  "profile": { "type": "string" },
+                  "generatedAt": { "type": "string" },
+                  "appVersion": { "type": "string" },
+                  "needsAttention": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "runId": { "type": "string" },
+                        "workflow": { "type": "string" },
+                        "workflowName": { "type": "string" },
+                        "step": { "type": ["string", "null"] },
+                        "reason": { "type": ["string", "null"] },
+                        "since": { "type": "string" }
+                      }
+                    }
+                  },
+                  "failedSince": { "type": "string" },
+                  "failed": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "runId": { "type": "string" },
+                        "workflow": { "type": "string" },
+                        "workflowName": { "type": "string" },
+                        "step": { "type": ["string", "null"] },
+                        "error": { "type": ["string", "null"] },
+                        "at": { "type": "string" }
+                      }
+                    }
+                  },
+                  "completedToday": { "type": "integer" },
+                  "runningNow": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "workflow": { "type": "string" },
+                        "startedAt": { "type": "string" }
+                      }
+                    }
+                  },
+                  "scheduledToday": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "workflow": { "type": "string" },
+                        "workflowName": { "type": "string" },
+                        "at": { "type": "string" }
+                      }
+                    }
+                  }
+                },
+                "required": ["schemaVersion", "generatedAt", "needsAttention", "failed", "completedToday", "runningNow", "scheduledToday"]
+              }
+            }
+          },
+          "Set_StatusDoc": {
+            "type": "SetVariable",
+            "runAfter": { "Parse_status_json": ["Succeeded"] },
+            "inputs": { "name": "StatusDoc", "value": "@body('Parse_status_json')" }
+          },
+          "Set_StatusOk": {
+            "type": "SetVariable",
+            "runAfter": { "Set_StatusDoc": ["Succeeded"] },
+            "inputs": { "name": "StatusOk", "value": "@equals(body('Parse_status_json')?['schemaVersion'], 1)" }
+          }
+        }
+      },
+      "Read_requests": {
+        "type": "Scope",
+        "runAfter": { "Read_status": ["Succeeded", "Failed", "Skipped", "TimedOut"] },
+        "actions": {
+          "List_todo_lists": {
+            "type": "OpenApiConnection",
+            "runAfter": {},
+            "inputs": {
+              "host": {
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_todo",
+                "connectionName": "shared_todo",
+                "operationId": "GetAllTodoListsV2"
+              },
+              "parameters": {}
+            }
+          },
+          "Filter_requests_list": {
+            "type": "Query",
+            "runAfter": { "List_todo_lists": ["Succeeded"] },
+            "inputs": {
+              "from": "@body('List_todo_lists')",
+              "where": "@equals(item()?['displayName'], 'Requests')"
+            }
+          },
+          "If_requests_list_found": {
+            "type": "If",
+            "runAfter": { "Filter_requests_list": ["Succeeded"] },
+            "expression": {
+              "and": [ { "greater": ["@length(body('Filter_requests_list'))", 0] } ]
+            },
+            "actions": {
+              "List_requests_tasks": {
+                "type": "OpenApiConnection",
+                "runAfter": {},
+                "inputs": {
+                  "host": {
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_todo",
+                    "connectionName": "shared_todo",
+                    "operationId": "ListToDosByFolderV2"
+                  },
+                  "parameters": {
+                    "folderId": "@first(body('Filter_requests_list'))?['id']",
+                    "$top": 999
+                  }
+                }
+              },
+              "Set_Tasks": {
+                "type": "SetVariable",
+                "runAfter": { "List_requests_tasks": ["Succeeded"] },
+                "inputs": { "name": "Tasks", "value": "@body('List_requests_tasks')" }
+              },
+              "Set_RequestsFound": {
+                "type": "SetVariable",
+                "runAfter": { "Set_Tasks": ["Succeeded"] },
+                "inputs": { "name": "RequestsFound", "value": true }
+              }
+            },
+            "else": { "actions": {} }
+          }
+        }
+      },
+      "Read_calendar": {
+        "type": "Scope",
+        "runAfter": { "Read_requests": ["Succeeded", "Failed", "Skipped", "TimedOut"] },
+        "actions": {
+          "Get_calendar_view_of_events_(V3)": {
+            "type": "OpenApiConnection",
+            "runAfter": {},
+            "inputs": {
+              "host": {
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                "connectionName": "shared_office365",
+                "operationId": "GetEventsCalendarViewV3"
+              },
+              "parameters": {
+                "calendarId": "Calendar",
+                "startDateTimeUtc": "@{formatDateTime(convertToUtc(concat(outputs('Today_local'), 'T00:00:00'), 'Pacific Standard Time'), 'yyyy-MM-ddTHH:mm:ss')}",
+                "endDateTimeUtc": "@{formatDateTime(convertToUtc(concat(formatDateTime(addDays(outputs('Next_workday'), 1), 'yyyy-MM-dd'), 'T00:00:00'), 'Pacific Standard Time'), 'yyyy-MM-ddTHH:mm:ss')}"
+              }
+            }
+          },
+          "Set_Events": {
+            "type": "SetVariable",
+            "runAfter": { "Get_calendar_view_of_events_(V3)": ["Succeeded"] },
+            "inputs": { "name": "Events", "value": "@coalesce(body('Get_calendar_view_of_events_(V3)')?['value'], createArray())" }
+          }
+        }
+      },
+      "Status_fresh": {
+        "type": "Compose",
+        "runAfter": { "Read_calendar": ["Succeeded", "Failed", "Skipped", "TimedOut"] },
+        "inputs": "@and(variables('StatusOk'), startsWith(string(variables('StatusDoc')?['generatedAt']), outputs('Today_local')))"
+      },
+      "Filter_open_requests": {
+        "type": "Query",
+        "runAfter": { "Status_fresh": ["Succeeded"] },
+        "inputs": {
+          "from": "@variables('Tasks')",
+          "where": "@and(not(equals(item()?['status'], 'completed')), not(empty(trim(replace(string(item()?['title']), decodeUriComponent('%00'), '')))))"
+        }
+      },
+      "Filter_done_today": {
+        "type": "Query",
+        "runAfter": { "Filter_open_requests": ["Succeeded"] },
+        "inputs": {
+          "from": "@variables('Tasks')",
+          "where": "@and(equals(item()?['status'], 'completed'), or(equals(substring(concat(string(item()?['completedDateTime']?['dateTime']), '0000-00-00'), 0, 10), outputs('Today_local')), equals(convertFromUtc(coalesce(item()?['completedDateTime']?['dateTime'], '1900-01-01T00:00:00Z'), 'Pacific Standard Time', 'yyyy-MM-dd'), outputs('Today_local'))))"
+        }
+      },
+      "Filter_overdue_requests": {
+        "type": "Query",
+        "runAfter": { "Filter_done_today": ["Succeeded"] },
+        "inputs": {
+          "from": "@body('Filter_open_requests')",
+          "where": "@less(substring(concat(string(item()?['dueDateTime']?['dateTime']), '9999-99-99'), 0, 10), outputs('Today_local'))"
+        }
+      },
+      "Filter_dated_requests": {
+        "type": "Query",
+        "runAfter": { "Filter_overdue_requests": ["Succeeded"] },
+        "inputs": {
+          "from": "@body('Filter_open_requests')",
+          "where": "@and(not(empty(string(item()?['dueDateTime']?['dateTime']))), not(less(substring(concat(string(item()?['dueDateTime']?['dateTime']), '9999-99-99'), 0, 10), outputs('Today_local'))))"
+        }
+      },
+      "Filter_undated_requests": {
+        "type": "Query",
+        "runAfter": { "Filter_dated_requests": ["Succeeded"] },
+        "inputs": {
+          "from": "@body('Filter_open_requests')",
+          "where": "@empty(string(item()?['dueDateTime']?['dateTime']))"
+        }
+      },
+      "Filter_waiting_requests": {
+        "type": "Query",
+        "runAfter": { "Filter_undated_requests": ["Succeeded"] },
+        "inputs": {
+          "from": "@body('Filter_open_requests')",
+          "where": "@equals(item()?['status'], 'waitingOnOthers')"
+        }
+      },
+      "Filter_events_today": {
+        "type": "Query",
+        "runAfter": { "Filter_waiting_requests": ["Succeeded"] },
+        "inputs": {
+          "from": "@variables('Events')",
+          "where": "@and(not(equals(item()?['isAllDay'], true)), not(equals(item()?['showAs'], 'free')), not(startsWith(coalesce(item()?['subject'], ''), 'Canceled:')), not(startsWith(coalesce(item()?['subject'], ''), 'Cancelled:')), equals(convertFromUtc(coalesce(item()?['startWithTimeZone'], '1900-01-01T00:00:00Z'), 'Pacific Standard Time', 'yyyy-MM-dd'), outputs('Today_local')))"
+        }
+      },
+      "Filter_events_next_workday": {
+        "type": "Query",
+        "runAfter": { "Filter_events_today": ["Succeeded"] },
+        "inputs": {
+          "from": "@variables('Events')",
+          "where": "@and(not(equals(item()?['isAllDay'], true)), not(equals(item()?['showAs'], 'free')), not(startsWith(coalesce(item()?['subject'], ''), 'Canceled:')), not(startsWith(coalesce(item()?['subject'], ''), 'Cancelled:')), equals(convertFromUtc(coalesce(item()?['startWithTimeZone'], '1900-01-01T00:00:00Z'), 'Pacific Standard Time', 'yyyy-MM-dd'), outputs('Next_workday')))"
+        }
+      },
+      "Select_next_workday_start_ticks": {
+        "type": "Select",
+        "runAfter": { "Filter_events_next_workday": ["Succeeded"] },
+        "inputs": {
+          "from": "@body('Filter_events_next_workday')",
+          "select": "@ticks(item()?['startWithTimeZone'])"
+        }
+      },
+      "First_meeting_next_workday": {
+        "type": "Compose",
+        "runAfter": { "Select_next_workday_start_ticks": ["Succeeded"] },
+        "inputs": "@if(empty(body('Select_next_workday_start_ticks')), '', convertFromUtc(addSeconds('1970-01-01T00:00:00Z', div(sub(min(union(body('Select_next_workday_start_ticks'), createArray(ticks('9999-12-30T00:00:00Z')))), ticks('1970-01-01T00:00:00Z')), 10000000)), 'Pacific Standard Time', 'h:mm tt'))"
+      },
+      "Carryover_order": {
+        "type": "Compose",
+        "runAfter": { "First_meeting_next_workday": ["Succeeded"] },
+        "inputs": "@take(union(body('Filter_overdue_requests'), body('Filter_dated_requests'), body('Filter_undated_requests')), 10)"
+      },
+      "Select_carryover_items": {
+        "type": "Select",
+        "runAfter": { "Carryover_order": ["Succeeded"] },
+        "inputs": {
+          "from": "@outputs('Carryover_order')",
+          "select": {
+            "title": "@take(trim(replace(string(item()?['title']), decodeUriComponent('%00'), '')), 200)",
+            "source": "@if(contains(string(item()?['body']?['content']), 'opossum-msgid:'), 'email', 'todo')",
+            "due": "@trim(substring(concat(string(item()?['dueDateTime']?['dateTime']), '          '), 0, 10))",
+            "note": "@if(less(substring(concat(string(item()?['dueDateTime']?['dateTime']), '9999-99-99'), 0, 10), outputs('Today_local')), 'Overdue', if(equals(item()?['status'], 'waitingOnOthers'), 'Waiting on others', ''))"
+          }
+        }
+      },
+      "Compose_tomorrow_json": {
+        "type": "Compose",
+        "runAfter": { "Select_carryover_items": ["Succeeded"] },
+        "inputs": {
+          "schemaVersion": 1,
+          "forDate": "@{outputs('Next_workday')}",
+          "generatedAt": "@{utcNow()}",
+          "items": "@body('Select_carryover_items')"
+        }
+      },
+      "Select_overdue_titles": {
+        "type": "Select",
+        "runAfter": { "Compose_tomorrow_json": ["Succeeded"] },
+        "inputs": {
+          "from": "@take(body('Filter_overdue_requests'), 3)",
+          "select": "@take(trim(replace(string(item()?['title']), decodeUriComponent('%00'), '')), 60)"
+        }
+      },
+      "Select_waiting_titles": {
+        "type": "Select",
+        "runAfter": { "Select_overdue_titles": ["Succeeded"] },
+        "inputs": {
+          "from": "@take(body('Filter_waiting_requests'), 3)",
+          "select": "@take(trim(replace(string(item()?['title']), decodeUriComponent('%00'), '')), 60)"
+        }
+      },
+      "Select_carryover_titles": {
+        "type": "Select",
+        "runAfter": { "Select_waiting_titles": ["Succeeded"] },
+        "inputs": {
+          "from": "@take(body('Select_carryover_items'), 3)",
+          "select": "@take(item()?['title'], 60)"
+        }
+      },
+      "Select_tomorrow_column_lines": {
+        "type": "Select",
+        "runAfter": { "Select_carryover_titles": ["Succeeded"] },
+        "inputs": {
+          "from": "@body('Select_carryover_items')",
+          "select": "@concat(item()?['title'], if(empty(item()?['due']), '', concat(' (due ', item()?['due'], ')')))"
+        }
+      },
+      "Line_done": {
+        "type": "Compose",
+        "runAfter": { "Select_tomorrow_column_lines": ["Succeeded"] },
+        "inputs": "@concat('Done: ', string(length(body('Filter_done_today'))), ' requests closed', if(outputs('Status_fresh'), concat(', ', string(variables('StatusDoc')?['completedToday']), ' app runs completed'), ' (no app status from today)'), ', ', string(length(body('Filter_events_today'))), ' meetings today')"
+      },
+      "Line_open": {
+        "type": "Compose",
+        "runAfter": { "Line_done": ["Succeeded"] },
+        "inputs": "@concat('Open: ', string(length(body('Filter_open_requests'))), ' requests', if(outputs('Status_fresh'), concat(', ', string(length(coalesce(variables('StatusDoc')?['needsAttention'], createArray()))), ' runs need attention, ', string(length(coalesce(variables('StatusDoc')?['failed'], createArray()))), ' failed in the last 24 h'), ''), if(variables('RequestsFound'), '', ' (To Do list \"Requests\" not found)'))"
+      },
+      "Line_overdue": {
+        "type": "Compose",
+        "runAfter": { "Line_open": ["Succeeded"] },
+        "inputs": "@concat('Overdue: ', string(length(body('Filter_overdue_requests'))), if(empty(body('Select_overdue_titles')), '', concat(' (', join(body('Select_overdue_titles'), '; '), if(greater(length(body('Filter_overdue_requests')), 3), '; …', ''), ')')))"
+      },
+      "Line_waiting": {
+        "type": "Compose",
+        "runAfter": { "Line_overdue": ["Succeeded"] },
+        "inputs": "@concat('Waiting: ', string(length(body('Filter_waiting_requests'))), if(empty(body('Select_waiting_titles')), '', concat(' (', join(body('Select_waiting_titles'), '; '), if(greater(length(body('Filter_waiting_requests')), 3), '; …', ''), ')')))"
+      },
+      "Line_tomorrow": {
+        "type": "Compose",
+        "runAfter": { "Line_waiting": ["Succeeded"] },
+        "inputs": "@concat('Tomorrow (', formatDateTime(outputs('Next_workday'), 'ddd M/d'), '): ', string(length(body('Filter_events_next_workday'))), ' meetings', if(empty(outputs('First_meeting_next_workday')), '', concat(', first at ', outputs('First_meeting_next_workday'))), '; ', string(length(body('Select_carryover_items'))), ' carryovers sent to the app', if(empty(body('Select_carryover_titles')), '', concat(' (top: ', join(body('Select_carryover_titles'), '; '), ')')))"
+      },
+      "Wrap_lines": {
+        "type": "Compose",
+        "runAfter": { "Line_tomorrow": ["Succeeded"] },
+        "inputs": "@createArray(outputs('Line_done'), outputs('Line_open'), outputs('Line_overdue'), outputs('Line_waiting'), outputs('Line_tomorrow'))"
+      },
+      "Wrap_summary_text": {
+        "type": "Compose",
+        "runAfter": { "Wrap_lines": ["Succeeded"] },
+        "inputs": "@take(concat('4:30 wrap · ', formatDateTime(outputs('Today_local'), 'dddd M/d'), decodeUriComponent('%0A'), join(outputs('Wrap_lines'), decodeUriComponent('%0A'))), 63000)"
+      },
+      "Select_wrap_lines_html": {
+        "type": "Select",
+        "runAfter": { "Wrap_summary_text": ["Succeeded"] },
+        "inputs": {
+          "from": "@outputs('Wrap_lines')",
+          "select": "@replace(replace(replace(item(), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')"
+        }
+      },
+      "Post_wrap": {
+        "type": "Scope",
+        "runAfter": { "Select_wrap_lines_html": ["Succeeded"] },
+        "actions": {
+          "Post_wrap_to_Teams": {
+            "type": "OpenApiConnection",
+            "runAfter": {},
+            "inputs": {
+              "host": {
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+                "connectionName": "shared_teams",
+                "operationId": "PostMessageToConversation"
+              },
+              "parameters": {
+                "poster": "Flow bot",
+                "location": "Chat with Flow bot",
+                "body/recipient": "__USER_UPN__",
+                "body/messageBody": "<p><b>OG Opossum 4:30 wrap · @{formatDateTime(outputs('Today_local'), 'dddd M/d')}</b><br>@{join(body('Select_wrap_lines_html'), '<br>')}</p>"
+              }
+            }
+          }
+        }
+      },
+      "Save_wrap_row": {
+        "type": "Scope",
+        "runAfter": { "Select_wrap_lines_html": ["Succeeded"] },
+        "actions": {
+          "Get_wrap_row": {
+            "type": "OpenApiConnection",
+            "runAfter": {},
+            "inputs": {
+              "host": {
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                "connectionName": "shared_sharepointonline",
+                "operationId": "GetItems"
+              },
+              "parameters": {
+                "dataset": "__SITE_URL__",
+                "table": "Opossum Wraps",
+                "$filter": "Title eq '@{outputs('Today_local')}'",
+                "$top": 1
+              }
+            }
+          },
+          "If_wrap_row_exists": {
+            "type": "If",
+            "runAfter": { "Get_wrap_row": ["Succeeded"] },
+            "expression": {
+              "and": [ { "greater": ["@length(coalesce(body('Get_wrap_row')?['value'], createArray()))", 0] } ]
+            },
+            "actions": {
+              "Update_wrap_row": {
+                "type": "OpenApiConnection",
+                "runAfter": {},
+                "inputs": {
+                  "host": {
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                    "connectionName": "shared_sharepointonline",
+                    "operationId": "PatchItem"
+                  },
+                  "parameters": {
+                    "dataset": "__SITE_URL__",
+                    "table": "Opossum Wraps",
+                    "id": "@first(body('Get_wrap_row')?['value'])?['ID']",
+                    "item/Title": "@outputs('Today_local')",
+                    "item/Date": "@outputs('Today_local')",
+                    "item/Done": "@length(body('Filter_done_today'))",
+                    "item/Open": "@length(body('Filter_open_requests'))",
+                    "item/Overdue": "@length(body('Filter_overdue_requests'))",
+                    "item/Waiting": "@length(body('Filter_waiting_requests'))",
+                    "item/ForDate": "@outputs('Next_workday')",
+                    "item/TomorrowCount": "@length(body('Select_carryover_items'))",
+                    "item/Tomorrow": "@join(body('Select_tomorrow_column_lines'), decodeUriComponent('%0A'))",
+                    "item/Summary": "@outputs('Wrap_summary_text')"
+                  }
+                }
+              }
+            },
+            "else": {
+              "actions": {
+                "Create_wrap_row": {
+                  "type": "OpenApiConnection",
+                  "runAfter": {},
+                  "inputs": {
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "PostItem"
+                    },
+                    "parameters": {
+                      "dataset": "__SITE_URL__",
+                      "table": "Opossum Wraps",
+                      "item/Title": "@outputs('Today_local')",
+                      "item/Date": "@outputs('Today_local')",
+                      "item/Done": "@length(body('Filter_done_today'))",
+                      "item/Open": "@length(body('Filter_open_requests'))",
+                      "item/Overdue": "@length(body('Filter_overdue_requests'))",
+                      "item/Waiting": "@length(body('Filter_waiting_requests'))",
+                      "item/ForDate": "@outputs('Next_workday')",
+                      "item/TomorrowCount": "@length(body('Select_carryover_items'))",
+                      "item/Tomorrow": "@join(body('Select_tomorrow_column_lines'), decodeUriComponent('%0A'))",
+                      "item/Summary": "@outputs('Wrap_summary_text')"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Write_tomorrow_json": {
+        "type": "If",
+        "description": "Write tomorrow.json only when Read_requests succeeded. A To Do failure must not overwrite yesterday's carryovers with an empty list; a missing 'Requests' list is not a failure (the scope succeeds with zero tasks) and writes an empty items array.",
+        "runAfter": { "Select_wrap_lines_html": ["Succeeded"] },
+        "expression": {
+          "and": [ { "equals": ["@actions('Read_requests')?['status']", "Succeeded"] } ]
+        },
+        "else": { "actions": {} },
+        "actions": {
+          "Get_tomorrow_file_metadata": {
+            "type": "OpenApiConnection",
+            "runAfter": {},
+            "inputs": {
+              "host": {
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness",
+                "connectionName": "shared_onedriveforbusiness",
+                "operationId": "GetFileMetadataByPath"
+              },
+              "parameters": {
+                "path": "__ONEDRIVE_FOLDER__/tomorrow.json"
+              }
+            }
+          },
+          "Update_tomorrow_file": {
+            "type": "OpenApiConnection",
+            "runAfter": { "Get_tomorrow_file_metadata": ["Succeeded"] },
+            "inputs": {
+              "host": {
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness",
+                "connectionName": "shared_onedriveforbusiness",
+                "operationId": "UpdateFile"
+              },
+              "parameters": {
+                "id": "@body('Get_tomorrow_file_metadata')?['Id']",
+                "body": "@string(outputs('Compose_tomorrow_json'))"
+              }
+            }
+          },
+          "Create_tomorrow_file": {
+            "type": "OpenApiConnection",
+            "runAfter": { "Update_tomorrow_file": ["Failed", "Skipped"] },
+            "inputs": {
+              "host": {
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness",
+                "connectionName": "shared_onedriveforbusiness",
+                "operationId": "CreateFile"
+              },
+              "parameters": {
+                "folderPath": "__ONEDRIVE_FOLDER__",
+                "name": "tomorrow.json",
+                "body": "@string(outputs('Compose_tomorrow_json'))"
+              }
+            }
+          }
+        }
+      }
+    },
+    "outputs": {}
+  }
+}

@@ -1,0 +1,316 @@
+{
+  "title": "Opossum Alerts",
+  "description": "One row per outbox alert file (OG_opossum_command/outbox/*.json), added by the Needs-Attention alert flow after it posts to Teams. The Hub's Alerts screen marks rows Seen; the Status sync flow marks them Resolved. Rows older than 90 days (by At) are deleted by the monthly cleanup flow.",
+  "site": "__SITE_URL__",
+  "sourceFiles": ["outbox/*.json", "status.json"],
+  "rowKey": "EventId (unique). The alert flow skips the file when GetItems with $filter=EventId eq '<eventId>' returns a row.",
+  "retention": "90 days by At. The Alerts cleanup flow (monthly) deletes rows with At lt addDays(utcNow(), -90).",
+  "columns": [
+    {
+      "internalName": "Title",
+      "displayName": "Title",
+      "type": "Text",
+      "required": true,
+      "indexed": false,
+      "enforceUnique": false,
+      "builtIn": true,
+      "source": "concat(alert workflowName, ': ', alert event), e.g. 'Start Workday: run.failed' (display only)"
+    },
+    {
+      "internalName": "EventId",
+      "displayName": "Event ID",
+      "type": "Text",
+      "required": true,
+      "indexed": true,
+      "enforceUnique": true,
+      "maxLength": 32,
+      "source": "alert eventId (32 lowercase hex digits)"
+    },
+    {
+      "internalName": "Event",
+      "displayName": "Event",
+      "type": "Text",
+      "required": true,
+      "indexed": false,
+      "enforceUnique": false,
+      "maxLength": 50,
+      "allowedValues": ["run.failed", "run.needsAttention", "run.overrun"],
+      "source": "alert event. Kept as Text, not Choice, so a future event name is stored instead of rejected."
+    },
+    {
+      "internalName": "Workflow",
+      "displayName": "Workflow",
+      "type": "Text",
+      "required": true,
+      "indexed": true,
+      "enforceUnique": false,
+      "maxLength": 255,
+      "source": "alert workflow (the workflow id). Indexed because Status sync filters open alerts by it."
+    },
+    {
+      "internalName": "WorkflowName",
+      "displayName": "Workflow name",
+      "type": "Text",
+      "required": false,
+      "indexed": false,
+      "enforceUnique": false,
+      "maxLength": 255,
+      "source": "alert workflowName (optional in the Parse JSON schema; empty if absent)"
+    },
+    {
+      "internalName": "RunId",
+      "displayName": "Run ID",
+      "type": "Text",
+      "required": false,
+      "indexed": false,
+      "enforceUnique": false,
+      "maxLength": 36,
+      "source": "alert runId (GUID). Added beyond the blueprint so Status sync can check whether that run is still in status.json needsAttention / failed."
+    },
+    {
+      "internalName": "Step",
+      "displayName": "Step",
+      "type": "Text",
+      "required": false,
+      "indexed": false,
+      "enforceUnique": false,
+      "maxLength": 255,
+      "source": "alert step (string or null; null -> empty)"
+    },
+    {
+      "internalName": "Message",
+      "displayName": "Message",
+      "type": "Text",
+      "required": true,
+      "indexed": false,
+      "enforceUnique": false,
+      "maxLength": 255,
+      "source": "alert message (scrubbed by the app, one line, at most 200 characters)"
+    },
+    {
+      "internalName": "At",
+      "displayName": "At",
+      "type": "DateTime",
+      "dateFormat": "DateTime",
+      "required": true,
+      "indexed": true,
+      "enforceUnique": false,
+      "source": "alert at (local time with offset; optional in the Parse JSON schema, so the flow falls back to utcNow() if absent). Indexed for newest-first views and the 90-day cleanup filter."
+    },
+    {
+      "internalName": "State",
+      "displayName": "State",
+      "type": "Choice",
+      "choices": ["New", "Seen", "Resolved"],
+      "default": "New",
+      "required": true,
+      "indexed": true,
+      "enforceUnique": false,
+      "source": "set by the flows, not the file: 'New' by the Needs-Attention alert flow; 'Seen' by the Hub's Got it; 'Resolved' by Status sync"
+    },
+    {
+      "internalName": "ResolvedAt",
+      "displayName": "Resolved at",
+      "type": "DateTime",
+      "dateFormat": "DateTime",
+      "required": false,
+      "indexed": false,
+      "enforceUnique": false,
+      "source": "utcNow() in the Status sync flow when it sets State = Resolved (not from any file)"
+    }
+  ],
+  "views": [
+    {
+      "title": "All Items",
+      "default": true,
+      "fields": ["Title", "Event", "WorkflowName", "Step", "Message", "At", "State", "ResolvedAt"],
+      "note": "Columns are added to the default view by CreateFieldAsXml option 16; EventId, Workflow and RunId are created without it."
+    },
+    {
+      "title": "Open",
+      "default": false,
+      "fields": ["Title", "Event", "WorkflowName", "Message", "At", "State"],
+      "query": "State ne Resolved, newest At first (created by the last spRestCreate calls)"
+    }
+  ],
+  "spRestDefaultHeaders": {
+    "Accept": "application/json;odata=verbose",
+    "Content-Type": "application/json;odata=verbose"
+  },
+  "spRestCreate": [
+    {
+      "step": "create list",
+      "method": "POST",
+      "uri": "_api/web/lists",
+      "body": {
+        "__metadata": { "type": "SP.List" },
+        "BaseTemplate": 100,
+        "Title": "Opossum Alerts",
+        "Description": "OG Opossum Command Central: one row per outbox alert. Kept 90 days.",
+        "AllowContentTypes": true,
+        "ContentTypesEnabled": false
+      }
+    },
+    {
+      "step": "field EventId",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Alerts')/fields/CreateFieldAsXml",
+      "body": { "parameters": { "__metadata": { "type": "SP.XmlSchemaFieldCreationInformation" }, "Options": 8,
+        "SchemaXml": "<Field Type='Text' Name='EventId' StaticName='EventId' DisplayName='Event ID' Required='TRUE' MaxLength='32' />" } }
+    },
+    {
+      "step": "field Event",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Alerts')/fields/CreateFieldAsXml",
+      "body": { "parameters": { "__metadata": { "type": "SP.XmlSchemaFieldCreationInformation" }, "Options": 24,
+        "SchemaXml": "<Field Type='Text' Name='Event' StaticName='Event' DisplayName='Event' Required='TRUE' MaxLength='50' />" } }
+    },
+    {
+      "step": "field Workflow",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Alerts')/fields/CreateFieldAsXml",
+      "body": { "parameters": { "__metadata": { "type": "SP.XmlSchemaFieldCreationInformation" }, "Options": 8,
+        "SchemaXml": "<Field Type='Text' Name='Workflow' StaticName='Workflow' DisplayName='Workflow' Required='TRUE' MaxLength='255' />" } }
+    },
+    {
+      "step": "field WorkflowName",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Alerts')/fields/CreateFieldAsXml",
+      "body": { "parameters": { "__metadata": { "type": "SP.XmlSchemaFieldCreationInformation" }, "Options": 24,
+        "SchemaXml": "<Field Type='Text' Name='WorkflowName' StaticName='WorkflowName' DisplayName='Workflow name' Required='FALSE' MaxLength='255' />" } }
+    },
+    {
+      "step": "field RunId",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Alerts')/fields/CreateFieldAsXml",
+      "body": { "parameters": { "__metadata": { "type": "SP.XmlSchemaFieldCreationInformation" }, "Options": 8,
+        "SchemaXml": "<Field Type='Text' Name='RunId' StaticName='RunId' DisplayName='Run ID' Required='FALSE' MaxLength='36' />" } }
+    },
+    {
+      "step": "field Step",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Alerts')/fields/CreateFieldAsXml",
+      "body": { "parameters": { "__metadata": { "type": "SP.XmlSchemaFieldCreationInformation" }, "Options": 24,
+        "SchemaXml": "<Field Type='Text' Name='Step' StaticName='Step' DisplayName='Step' Required='FALSE' MaxLength='255' />" } }
+    },
+    {
+      "step": "field Message",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Alerts')/fields/CreateFieldAsXml",
+      "body": { "parameters": { "__metadata": { "type": "SP.XmlSchemaFieldCreationInformation" }, "Options": 24,
+        "SchemaXml": "<Field Type='Text' Name='Message' StaticName='Message' DisplayName='Message' Required='TRUE' MaxLength='255' />" } }
+    },
+    {
+      "step": "field At",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Alerts')/fields/CreateFieldAsXml",
+      "body": { "parameters": { "__metadata": { "type": "SP.XmlSchemaFieldCreationInformation" }, "Options": 24,
+        "SchemaXml": "<Field Type='DateTime' Name='At' StaticName='At' DisplayName='At' Required='TRUE' Format='DateTime' />" } }
+    },
+    {
+      "step": "field State",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Alerts')/fields/CreateFieldAsXml",
+      "body": { "parameters": { "__metadata": { "type": "SP.XmlSchemaFieldCreationInformation" }, "Options": 24,
+        "SchemaXml": "<Field Type='Choice' Name='State' StaticName='State' DisplayName='State' Required='TRUE' Format='Dropdown' FillInChoice='FALSE'><Default>New</Default><CHOICES><CHOICE>New</CHOICE><CHOICE>Seen</CHOICE><CHOICE>Resolved</CHOICE></CHOICES></Field>" } }
+    },
+    {
+      "step": "field ResolvedAt",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Alerts')/fields/CreateFieldAsXml",
+      "body": { "parameters": { "__metadata": { "type": "SP.XmlSchemaFieldCreationInformation" }, "Options": 24,
+        "SchemaXml": "<Field Type='DateTime' Name='ResolvedAt' StaticName='ResolvedAt' DisplayName='Resolved at' Required='FALSE' Format='DateTime' />" } }
+    },
+    {
+      "step": "index EventId",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Alerts')/fields/getbyinternalnameortitle('EventId')",
+      "headers": { "X-HTTP-Method": "MERGE", "IF-MATCH": "*" },
+      "body": { "__metadata": { "type": "SP.Field" }, "Indexed": true }
+    },
+    {
+      "step": "unique EventId (after the index)",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Alerts')/fields/getbyinternalnameortitle('EventId')",
+      "headers": { "X-HTTP-Method": "MERGE", "IF-MATCH": "*" },
+      "body": { "__metadata": { "type": "SP.Field" }, "EnforceUniqueValues": true }
+    },
+    {
+      "step": "index Workflow",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Alerts')/fields/getbyinternalnameortitle('Workflow')",
+      "headers": { "X-HTTP-Method": "MERGE", "IF-MATCH": "*" },
+      "body": { "__metadata": { "type": "SP.Field" }, "Indexed": true }
+    },
+    {
+      "step": "index At",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Alerts')/fields/getbyinternalnameortitle('At')",
+      "headers": { "X-HTTP-Method": "MERGE", "IF-MATCH": "*" },
+      "body": { "__metadata": { "type": "SP.Field" }, "Indexed": true }
+    },
+    {
+      "step": "index State",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Alerts')/fields/getbyinternalnameortitle('State')",
+      "headers": { "X-HTTP-Method": "MERGE", "IF-MATCH": "*" },
+      "body": { "__metadata": { "type": "SP.Field" }, "Indexed": true }
+    },
+    {
+      "step": "view Open",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Alerts')/views",
+      "body": {
+        "__metadata": { "type": "SP.View" },
+        "Title": "Open",
+        "PersonalView": false,
+        "RowLimit": 100,
+        "ViewQuery": "<Where><Neq><FieldRef Name='State' /><Value Type='Choice'>Resolved</Value></Neq></Where><OrderBy><FieldRef Name='At' Ascending='FALSE' /></OrderBy>"
+      }
+    },
+    {
+      "step": "view Open: clear the default fields (a REST-created view may already hold LinkTitle)",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Alerts')/views/getbytitle('Open')/viewfields/removeallviewfields",
+      "body": null
+    },
+    {
+      "step": "view Open: fields",
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Alerts')/views/getbytitle('Open')/viewfields/addviewfield('LinkTitle')",
+      "body": null
+    },
+    {
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Alerts')/views/getbytitle('Open')/viewfields/addviewfield('Event')",
+      "body": null
+    },
+    {
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Alerts')/views/getbytitle('Open')/viewfields/addviewfield('WorkflowName')",
+      "body": null
+    },
+    {
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Alerts')/views/getbytitle('Open')/viewfields/addviewfield('Message')",
+      "body": null
+    },
+    {
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Alerts')/views/getbytitle('Open')/viewfields/addviewfield('At')",
+      "body": null
+    },
+    {
+      "method": "POST",
+      "uri": "_api/web/lists/getbytitle('Opossum Alerts')/views/getbytitle('Open')/viewfields/addviewfield('State')",
+      "body": null
+    },
+    {
+      "step": "verify internal names",
+      "method": "GET",
+      "uri": "_api/web/lists/getbytitle('Opossum Alerts')/fields?$select=InternalName,Title&$filter=Hidden eq false",
+      "body": null,
+      "check": "EventId, Event, Workflow, WorkflowName, RunId, Step, Message, At, State and ResolvedAt must appear with exactly these InternalName values; the flows' OData filters (EventId eq, State ne, At lt) rely on them. If SharePoint renamed one (for example to Event0 or State0), rename the column in the flows before turning them on."
+    }
+  ]
+}
