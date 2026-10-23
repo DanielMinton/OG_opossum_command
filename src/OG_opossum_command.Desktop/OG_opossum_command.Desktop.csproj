@@ -18,7 +18,13 @@
     <RootNamespace>OG_opossum_command.Desktop</RootNamespace>
     <StartupObject>OG_opossum_command.Desktop.Program</StartupObject>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- App icon (ADR-056): the exe, taskbar and Alt+Tab use this; the tray and window load it as a resource. -->
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\app.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />

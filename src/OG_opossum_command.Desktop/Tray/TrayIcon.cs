@@ -15,6 +15,7 @@ internal sealed class TrayIcon : IDisposable
     private readonly ShellViewModel _shell;
     private readonly MenuItem _workItem;
     private readonly MenuItem _personalItem;
+    private readonly System.Drawing.Icon _appIcon;
     private bool _disposed;
 
     public TrayIcon(App app, ShellViewModel shell)
@@ -64,8 +65,8 @@ internal sealed class TrayIcon : IDisposable
         _icon = new TaskbarIcon
         {
             ToolTipText = "OG Opossum Command Central",
-            // From the WindowsDesktop shared framework (System.Drawing.Common ships with WPF); no extra package (ADR-027).
-            Icon = System.Drawing.SystemIcons.Application,
+            // System.Drawing ships with WPF in the WindowsDesktop shared framework; no extra package (ADR-027).
+            Icon = _appIcon = LoadAppIcon(),
             ContextMenu = menu,
         };
         _icon.TrayMouseDoubleClick += (_, _) => app.ShowDashboard();
@@ -78,6 +79,40 @@ internal sealed class TrayIcon : IDisposable
 
     /// <summary>The underlying icon, for balloon notifications; <c>null</c> once disposed.</summary>
     public TaskbarIcon? Icon => _disposed ? null : _icon;
+
+    /// <summary>
+    /// The app icon (Assets/app.ico) at the notification area's size, so Windows picks the hand-tuned small image
+    /// instead of shrinking a large one. Falls back to the generic application icon if the resource is missing.
+    /// </summary>
+    private static System.Drawing.Icon LoadAppIcon()
+    {
+        try
+        {
+            var info = System.Windows.Application.GetResourceStream(new Uri("pack://application:,,,/Assets/app.ico"));
+            if (info is not null)
+            {
+                using var stream = info.Stream;
+                var size = Math.Max(16, NativeMethods.GetSystemMetrics(NativeMethods.SmCxSmIcon));
+                return new System.Drawing.Icon(stream, size, size);
+            }
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or ArgumentException or InvalidOperationException)
+        {
+            // Fall through to the generic icon; the tray still works.
+        }
+
+        return (System.Drawing.Icon)System.Drawing.SystemIcons.Application.Clone();
+    }
+
+    private static class NativeMethods
+    {
+        public const int SmCxSmIcon = 49;
+
+        // DllImport rather than LibraryImport, as in GlobalHotkey: the latter needs AllowUnsafeBlocks.
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        [System.Runtime.InteropServices.DefaultDllImportSearchPaths(System.Runtime.InteropServices.DllImportSearchPath.System32)]
+        public static extern int GetSystemMetrics(int index);
+    }
 
     private void SyncProfileChecks()
     {
@@ -94,5 +129,6 @@ internal sealed class TrayIcon : IDisposable
 
         _disposed = true;
         _icon.Dispose();
+        _appIcon.Dispose();
     }
 }

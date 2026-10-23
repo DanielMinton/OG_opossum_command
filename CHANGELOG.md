@@ -2,6 +2,13 @@
 
 All notable changes to OG Opossum Command Central. Versions follow [SemVer](https://semver.org/).
 
+## 0.2.1 — 2026-10-23
+
+### Added
+
+- **App icon** (ADR-056): your opossum artwork on the program, taskbar, window and tray (a face
+  close-up at small sizes so it stays readable), plus PNGs for the Hub in `assets/branding/`.
+
 ## 0.2.0 — 2026-10-23
 
 Phases 8-9: exports and alerts through your work OneDrive. Still no network calls, sign-in, or
