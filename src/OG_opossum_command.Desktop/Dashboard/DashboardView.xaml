@@ -11,12 +11,56 @@
              AutomationProperties.Name="Dashboard">
 
     <!-- Scrolls so that no panel (and never Cancel) is clipped at large text sizes.
-         Lists inside pass the wheel to this page (ADR-055). -->
+         Lists inside pass the wheel to this page (ADR-055). Sections arrive one after another (ADR-057). -->
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False" Padding="0,0,8,0">
     <StackPanel>
 
-        <!-- Six tiles, stable positions (spec §14) -->
+        <!-- Headline numbers for today -->
+        <UniformGrid Columns="4" Margin="0,0,-12,0" AutomationProperties.Name="Today at a glance">
+            <Border Style="{StaticResource OgocStat}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource OgocCaption}" Text="Runs today" />
+                    <TextBlock Style="{StaticResource OgocStatNumber}" a11y:Motion.CountTo="{Binding RunsToday}" />
+                    <TextBlock Style="{StaticResource OgocCaption}" Text="finished in this profile" />
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource OgocStat}" a11y:Motion.EntranceDelay="50">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource OgocCaption}" Text="Success rate" />
+                    <TextBlock Style="{StaticResource OgocStatNumber}" a11y:Motion.CountSuffix="%" a11y:Motion.CountTo="{Binding SuccessRate}" />
+                    <TextBlock Style="{StaticResource OgocCaption}" Text="of today's runs completed" />
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource OgocStat}" a11y:Motion.EntranceDelay="100">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource OgocCaption}" Text="Needs attention" />
+                        <Ellipse Width="7" Height="7" Margin="8,1,0,0" VerticalAlignment="Center"
+                                 Fill="{DynamicResource SystemFillColorCriticalBrush}"
+                                 a11y:Motion.Pulse="True"
+                                 Visibility="{Binding HasAttention, Converter={StaticResource BoolToVis}}" />
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource OgocStatNumber}" a11y:Motion.CountTo="{Binding AttentionCount}" />
+                    <TextBlock Style="{StaticResource OgocCaption}" Text="interrupted runs waiting" />
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource OgocStat}" a11y:Motion.EntranceDelay="150">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource OgocCaption}" Text="Next up" />
+                    <TextBlock Style="{StaticResource OgocStatNumber}" FontSize="{DynamicResource OgocTitleSize}" Margin="0,6,0,3"
+                               Text="{Binding NextUpName}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Style="{StaticResource OgocCaption}" Text="{Binding NextUpWhen}" />
+                </StackPanel>
+            </Border>
+        </UniformGrid>
+
+        <!-- Six tiles, stable positions (spec §14). Ctrl+1..6 run them (MainWindow input bindings). -->
+        <DockPanel Margin="2,6,0,8" a11y:Motion.Entrance="True" a11y:Motion.EntranceDelay="120">
+            <TextBlock DockPanel.Dock="Right" Style="{StaticResource OgocCaption}" VerticalAlignment="Center" Text="Ctrl+1 to Ctrl+6 run a tile" />
+            <TextBlock Style="{StaticResource OgocHeading}" Margin="0" Text="Workflows" />
+        </DockPanel>
         <ItemsControl ItemsSource="{Binding Tiles}"
+                      AlternationCount="6"
                       Margin="0,0,-12,0"
                       Focusable="False"
                       KeyboardNavigation.TabNavigation="Continue"
@@ -29,6 +73,9 @@
             <ItemsControl.ItemTemplate>
                 <DataTemplate DataType="{x:Type local:WorkflowTile}">
                     <Button Style="{StaticResource OgocTile}"
+                            a11y:Motion.Entrance="True"
+                            a11y:Motion.EntranceDelay="160"
+                            a11y:Motion.Stagger="45"
                             Command="{Binding DataContext.RunCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                             CommandParameter="{Binding}"
                             IsEnabled="{Binding IsEnabled}"
@@ -40,60 +87,170 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <!-- Badge and glyph grow with FontScale (ADR-047). -->
-                            <Grid Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
-                                <Ellipse Width="{DynamicResource OgocBadgeSize}" Height="{DynamicResource OgocBadgeSize}"
-                                         Fill="{DynamicResource AccentFillColorDefaultBrush}" />
-                                <TextBlock Text="&#xE768;" FontFamily="{StaticResource OgocIconFont}" FontSize="{DynamicResource OgocBodySize}"
-                                           HorizontalAlignment="Center" VerticalAlignment="Center" Margin="2,0,0,0"
-                                           Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+
+                            <!-- Badge: accent gradient disc, a spinning ring while running, and a glyph per state.
+                                 Grows with FontScale (ADR-047). Decoration only: the state is in the tile's name. -->
+                            <Grid Grid.Column="0" Margin="0,0,14,0" VerticalAlignment="Center"
+                                  Width="{DynamicResource OgocBadgeSize}" Height="{DynamicResource OgocBadgeSize}">
+                                <Ellipse>
+                                    <Ellipse.Style>
+                                        <Style TargetType="Ellipse">
+                                            <Setter Property="Fill" Value="{DynamicResource OgocBadgeFill}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsPlaceholder}" Value="True">
+                                                    <Setter Property="Fill" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                                                    <Setter Property="Stroke" Value="{DynamicResource ControlStrongStrokeColorDefaultBrush}" />
+                                                    <Setter Property="StrokeDashArray" Value="2 2" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Path=(SystemParameters.HighContrast)}" Value="True">
+                                                    <Setter Property="Fill" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Ellipse.Style>
+                                </Ellipse>
+                                <Ellipse Margin="-5" StrokeThickness="2.5" StrokeDashArray="4 3"
+                                         Stroke="{DynamicResource AccentFillColorDefaultBrush}"
+                                         IsHitTestVisible="False"
+                                         a11y:Motion.Spin="True">
+                                    <Ellipse.Style>
+                                        <Style TargetType="Ellipse">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding State}" Value="Running">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Ellipse.Style>
+                                </Ellipse>
+                                <TextBlock FontFamily="{StaticResource OgocIconFont}" FontSize="{DynamicResource OgocBodySize}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           a11y:Motion.Pop="True">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="&#xE768;" />
+                                            <Setter Property="Margin" Value="2,0,0,0" />
+                                            <Setter Property="Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding State}" Value="Succeeded">
+                                                    <Setter Property="Text" Value="&#xE73E;" />
+                                                    <Setter Property="Margin" Value="0" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding State}" Value="Failed">
+                                                    <Setter Property="Text" Value="&#xE711;" />
+                                                    <Setter Property="Margin" Value="0" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsPlaceholder}" Value="True">
+                                                    <Setter Property="Text" Value="&#xE710;" />
+                                                    <Setter Property="Margin" Value="0" />
+                                                    <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Path=(SystemParameters.HighContrast)}" Value="True">
+                                                    <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
                             </Grid>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+
+                            <StackPanel Grid.Column="1" Grid.ColumnSpan="2" VerticalAlignment="Center">
                                 <TextBlock Text="{Binding Name}" TextWrapping="Wrap"
                                            FontSize="{DynamicResource OgocLargeSize}" FontWeight="SemiBold" />
-                                <TextBlock Text="{Binding Description}" Style="{StaticResource OgocCaption}"
-                                           TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
+                                <DockPanel Margin="0,3,0,0">
+                                    <Border DockPanel.Dock="Right" Style="{StaticResource OgocKeycap}" Margin="8,0,0,0" VerticalAlignment="Center"
+                                            Visibility="{Binding IsEnabled, Converter={StaticResource BoolToVis}}">
+                                        <TextBlock Text="{Binding Shortcut}" FontFamily="{StaticResource OgocMonoFont}" FontSize="{DynamicResource OgocSmallSize}"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    </Border>
+                                    <TextBlock Text="{Binding Description}" Style="{StaticResource OgocCaption}" VerticalAlignment="Center"
+                                               TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                                </DockPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,6,0,0" a11y:Motion.Pop="True">
+                                    <StackPanel.Style>
+                                        <Style TargetType="StackPanel">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding State}" Value="Idle">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </StackPanel.Style>
+                                    <Ellipse Width="7" Height="7" Margin="0,1,6,0" VerticalAlignment="Center">
+                                        <Ellipse.Style>
+                                            <Style TargetType="Ellipse">
+                                                <Setter Property="Fill" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                                <Setter Property="a11y:Motion.Pulse" Value="True" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding State}" Value="Succeeded">
+                                                        <Setter Property="Fill" Value="{DynamicResource SystemFillColorSuccessBrush}" />
+                                                        <Setter Property="a11y:Motion.Pulse" Value="False" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding State}" Value="Failed">
+                                                        <Setter Property="Fill" Value="{DynamicResource SystemFillColorCriticalBrush}" />
+                                                        <Setter Property="a11y:Motion.Pulse" Value="False" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Ellipse.Style>
+                                    </Ellipse>
+                                    <TextBlock Text="{Binding StateText}" FontSize="{DynamicResource OgocSmallSize}" FontWeight="SemiBold" />
+                                </StackPanel>
                             </StackPanel>
+
                         </Grid>
                     </Button>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>
 
-        <!-- Active execution -->
+        <!-- Active execution: accent stripe, live headline, step progress, and the step timeline -->
         <Border Style="{StaticResource OgocCard}"
-                BorderThickness="2"
-                BorderBrush="{DynamicResource AccentFillColorDefaultBrush}"
+                Padding="0"
                 Visibility="{Binding HasActiveRun, Converter={StaticResource BoolToVis}}"
+                a11y:Motion.Pop="True" a11y:Motion.PopFrom="0.94"
                 AutomationProperties.Name="Active execution">
             <Grid>
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="4" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0">
-                    <TextBlock Style="{StaticResource OgocHeading}" Text="Running now" />
-                    <TextBlock Text="{Binding ActiveHeadline}" TextWrapping="Wrap" FontSize="{DynamicResource OgocLargeSize}" FontWeight="SemiBold" a11y:LiveRegion.Announce="True" />
-                    <ProgressBar IsIndeterminate="True" Height="4" Margin="0,8,0,4" AutomationProperties.Name="Run in progress" />
-                    <ItemsControl ItemsSource="{Binding ActiveSteps}" Margin="0,4,0,0" Focusable="False">
+                <Border Grid.Column="0" CornerRadius="8,0,0,8" Background="{DynamicResource AccentFillColorDefaultBrush}" />
+                <StackPanel Grid.Column="1" Margin="16,14,0,14">
+                    <StackPanel Orientation="Horizontal">
+                        <Ellipse Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center"
+                                 Fill="{DynamicResource AccentFillColorDefaultBrush}" a11y:Motion.Pulse="True" />
+                        <TextBlock Style="{StaticResource OgocHeading}" Margin="0" Text="Running now" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding ActiveHeadline}" TextWrapping="Wrap" Margin="0,6,0,0"
+                               FontSize="{DynamicResource OgocLargeSize}" FontWeight="SemiBold" a11y:LiveRegion.Announce="True" />
+                    <ProgressBar Value="{Binding ActiveFraction, Mode=OneWay}" Maximum="1" Height="4" Margin="0,10,0,8"
+                                 AutomationProperties.Name="Steps finished" />
+                    <ItemsControl ItemsSource="{Binding ActiveSteps}" Focusable="False">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="{x:Type local:StepRow}">
-                                <TextBlock Margin="0,2" TextWrapping="Wrap" AutomationProperties.Name="{Binding AutomationName}">
-                                    <Run Text="{Binding Glyph, Mode=OneWay}" FontWeight="Bold" />
-                                    <Run Text=" " />
-                                    <Run Text="{Binding Text, Mode=OneWay}" />
-                                </TextBlock>
+                                <Grid Margin="0,3" AutomationProperties.Name="{Binding AutomationName}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Ellipse Grid.Column="0" Style="{StaticResource OgocDot}" Margin="2,0,12,0" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Text}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                                </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </StackPanel>
                 <!-- AccessText: the Fluent accent template does not underline access keys from a string. -->
-                <Button Grid.Column="1"
+                <Button Grid.Column="2"
                         Style="{StaticResource OgocCancel}"
                         Command="{Binding CancelCommand}"
                         VerticalAlignment="Top"
-                        Margin="16,0,0,0"
+                        Margin="16,14,16,14"
                         AutomationProperties.Name="Cancel the active run">
                     <AccessText Text="_Cancel" />
                 </Button>
@@ -102,7 +259,17 @@
 
         <!-- Feedback line and next schedule occurrence (spec §08) -->
         <StackPanel Margin="2,0,0,12">
-            <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" a11y:LiveRegion.Announce="True" />
+            <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" a11y:LiveRegion.Announce="True">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Style.Triggers>
+                            <Trigger Property="Text" Value="">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
             <TextBlock Text="{Binding NextScheduled}" FontSize="{DynamicResource OgocBodySize}">
                 <TextBlock.Style>
                     <Style TargetType="TextBlock" BasedOn="{StaticResource OgocCaption}">
@@ -120,6 +287,7 @@
         <Border Style="{StaticResource OgocCard}"
                 Background="{DynamicResource SystemFillColorCriticalBackgroundBrush}"
                 Visibility="{Binding HasAttention, Converter={StaticResource BoolToVis}}"
+                a11y:Motion.Entrance="True" a11y:Motion.EntranceDelay="260"
                 AutomationProperties.Name="Runs that need attention">
             <StackPanel>
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
@@ -172,7 +340,8 @@
         </Border>
 
         <!-- Today: remaining events from the profile's calendar file (ADR-011, ADR-039) -->
-        <Border Style="{StaticResource OgocCard}" AutomationProperties.Name="Today">
+        <Border Style="{StaticResource OgocCard}" AutomationProperties.Name="Today"
+                a11y:Motion.Entrance="True" a11y:Motion.EntranceDelay="300">
             <StackPanel>
                 <DockPanel LastChildFill="True" Margin="0,0,0,4">
                     <Button DockPanel.Dock="Right"
@@ -193,25 +362,31 @@
                 </DockPanel>
                 <ItemsControl ItemsSource="{Binding Today}"
                               Grid.IsSharedSizeScope="True"
+                              AlternationCount="50"
                               Margin="0,6,0,0"
                               Focusable="False"
                               KeyboardNavigation.TabNavigation="Continue"
                               Visibility="{Binding HasTodayEvents, Converter={StaticResource BoolToVis}}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="{x:Type local:TodayEvent}">
-                            <Grid Margin="0,3">
+                            <Grid Margin="0,3" a11y:Motion.Entrance="True" a11y:Motion.EntranceDelay="320" a11y:Motion.Stagger="30">
                                 <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="Auto" SharedSizeGroup="TodayTime" />
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{Binding Time}" FontFamily="{StaticResource OgocMonoFont}" VerticalAlignment="Center" Margin="0,0,16,0"
+                                <!-- The meeting in progress gets an accent bar (decoration; the name says "in progress"). -->
+                                <Border Grid.Column="0" Width="3" CornerRadius="1.5" Margin="0,1,10,1"
+                                        Background="{DynamicResource AccentFillColorDefaultBrush}"
+                                        Visibility="{Binding IsNow, Converter={StaticResource BoolToVis}}" />
+                                <TextBlock Grid.Column="1" Text="{Binding Time}" FontFamily="{StaticResource OgocMonoFont}" VerticalAlignment="Center" Margin="0,0,16,0"
                                            Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
-                                <TextBlock Grid.Column="1" VerticalAlignment="Center" TextWrapping="Wrap">
+                                <TextBlock Grid.Column="2" VerticalAlignment="Center" TextWrapping="Wrap">
                                     <Run Text="{Binding Subject, Mode=OneWay}" />
                                     <Run Text="{Binding Detail, Mode=OneWay}" FontSize="{DynamicResource OgocSmallSize}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                                 </TextBlock>
-                                <Button Grid.Column="2"
+                                <Button Grid.Column="3"
                                         Content="Open"
                                         Style="{StaticResource OgocButton}"
                                         Padding="10,2"
@@ -273,26 +448,57 @@
             </StackPanel>
         </Border>
 
-        <!-- Recent runs: at most 8 rows, so the list grows with them and the page does the scrolling. -->
-        <Border Style="{StaticResource OgocCard}" Padding="16,14,16,8">
+        <!-- Recent runs: at most 8 rows with a coloured status chip; the page does the scrolling. -->
+        <Border Style="{StaticResource OgocCard}" Padding="16,14,16,10"
+                a11y:Motion.Entrance="True" a11y:Motion.EntranceDelay="340">
             <StackPanel>
                 <TextBlock Style="{StaticResource OgocHeading}" Text="Recent runs" />
-                <ListView ItemsSource="{Binding RecentRuns}"
-                          MinHeight="80"
-                          Style="{StaticResource OgocList}"
-                          ScrollViewer.VerticalScrollBarVisibility="Disabled"
-                          a11y:WheelPassThrough.IsEnabled="True"
-                          AutomationProperties.Name="Recent runs"
-                          SelectionMode="Single">
-                    <ListView.View>
-                        <GridView>
-                            <GridViewColumn Header="When" Width="140" DisplayMemberBinding="{Binding When}" />
-                            <GridViewColumn Header="Workflow" Width="180" DisplayMemberBinding="{Binding WorkflowName}" />
-                            <GridViewColumn Header="Status" Width="110" DisplayMemberBinding="{Binding Status}" />
-                            <GridViewColumn Header="Result" Width="320" DisplayMemberBinding="{Binding Summary}" />
-                        </GridView>
-                    </ListView.View>
-                </ListView>
+                <TextBlock Style="{StaticResource OgocCaption}" Text="No runs yet. Start one from a tile above."
+                           Margin="0,0,0,4">
+                    <TextBlock.Visibility>
+                        <Binding Path="RecentRuns.Count">
+                            <Binding.Converter>
+                                <local:ZeroToVisibleConverter />
+                            </Binding.Converter>
+                        </Binding>
+                    </TextBlock.Visibility>
+                </TextBlock>
+                <ListBox ItemsSource="{Binding RecentRuns}"
+                         AlternationCount="8"
+                         BorderThickness="0"
+                         Background="Transparent"
+                         HorizontalContentAlignment="Stretch"
+                         FocusVisualStyle="{StaticResource OgocFocusVisual}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                         ScrollViewer.CanContentScroll="False"
+                         a11y:WheelPassThrough.IsEnabled="True"
+                         AutomationProperties.Name="Recent runs">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate DataType="{x:Type local:RunSummary}">
+                            <Grid Margin="0,4" a11y:Motion.Entrance="True" a11y:Motion.EntranceDelay="360" a11y:Motion.Stagger="30">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="128" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Style="{StaticResource OgocChip}" Margin="0,0,14,0">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Ellipse Style="{StaticResource OgocDot}" Margin="0,1,6,0" />
+                                        <TextBlock Text="{Binding Status}" FontSize="{DynamicResource OgocSmallSize}" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                                    </StackPanel>
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding WorkflowName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding Summary}" Style="{StaticResource OgocCaption}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                                <TextBlock Grid.Column="2" Text="{Binding When}" Style="{StaticResource OgocCaption}" VerticalAlignment="Center"
+                                           FontFamily="{StaticResource OgocMonoFont}" Margin="12,0,0,0" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
             </StackPanel>
         </Border>
     </StackPanel>

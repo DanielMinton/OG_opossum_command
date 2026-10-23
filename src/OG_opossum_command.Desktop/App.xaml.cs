@@ -150,6 +150,7 @@ public partial class App : Application, IDashboardPresenter
     {
         base.OnStartup(e);
         FontScale.Track(this);
+        AccentBrushes.Track(this);
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
         var paths = PathsOverride ?? AppPaths.FromEnvironment();
@@ -174,7 +175,8 @@ public partial class App : Application, IDashboardPresenter
         _notifications = new NotificationService(Host.History, sink, Host.Engine, Host.Scheduler);
 
         // Motion and sound (ADR-057). Smoke runs snapshot the final frame and stay silent.
-        Motion.ForceDisabled = SmokeUi;
+        // OGOC_SMOKE_MOTION=1 keeps motion on in a smoke run, to exercise it and capture frames mid-entrance.
+        Motion.ForceDisabled = SmokeUi && Environment.GetEnvironmentVariable("OGOC_SMOKE_MOTION") != "1";
         Motion.ApplySetting(Host.History.GetSetting(SettingKeys.Motion));
         if (!SmokeUi)
         {
@@ -247,6 +249,16 @@ public partial class App : Application, IDashboardPresenter
         {
             await window.LoadedTask;
             await Shell!.Dashboard.FirstBindCompleted;
+
+            if (Motion.IsEnabled)
+            {
+                // Frames from the entrance, then the settled dashboard.
+                await Task.Delay(140);
+                SmokeSnapshot.Save(window, "dashboard-enter-1");
+                await Task.Delay(220);
+                SmokeSnapshot.Save(window, "dashboard-enter-2");
+                await Task.Delay(900);
+            }
 
             SmokeSnapshot.Save(window, "dashboard");
 

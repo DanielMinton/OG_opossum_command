@@ -15,6 +15,15 @@
         KeyboardNavigation.TabNavigation="Cycle"
         FontSize="{DynamicResource OgocBodySize}"
         AutomationProperties.Name="OG Opossum Command Central">
+    <!-- Ctrl+1..6 run the dashboard tiles from any page (ADR-057). -->
+    <Window.InputBindings>
+        <KeyBinding Modifiers="Ctrl" Key="D1" Command="{Binding Dashboard.RunAtCommand}" CommandParameter="1" />
+        <KeyBinding Modifiers="Ctrl" Key="D2" Command="{Binding Dashboard.RunAtCommand}" CommandParameter="2" />
+        <KeyBinding Modifiers="Ctrl" Key="D3" Command="{Binding Dashboard.RunAtCommand}" CommandParameter="3" />
+        <KeyBinding Modifiers="Ctrl" Key="D4" Command="{Binding Dashboard.RunAtCommand}" CommandParameter="4" />
+        <KeyBinding Modifiers="Ctrl" Key="D5" Command="{Binding Dashboard.RunAtCommand}" CommandParameter="5" />
+        <KeyBinding Modifiers="Ctrl" Key="D6" Command="{Binding Dashboard.RunAtCommand}" CommandParameter="6" />
+    </Window.InputBindings>
     <!-- Layout (ADR-055): navigation rail on the left, page header and the current view on the right.
          No window Background: the Fluent theme paints it (Mica on Windows 11). -->
     <Grid>
@@ -33,6 +42,7 @@
                 </Grid.ColumnDefinitions>
                 <Image Grid.Column="0" Source="/Assets/app.ico" Width="36" Height="36" Margin="0,0,10,0"
                        VerticalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality"
+                       a11y:Motion.Entrance="True"
                        AutomationProperties.Name="OG Opossum logo" />
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                     <TextBlock Text="OG Opossum" FontSize="{DynamicResource OgocLargeSize}" FontWeight="SemiBold" />
@@ -112,12 +122,15 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <TextBlock Grid.Row="0" Grid.Column="0"
-                           Text="{Binding PageTitle}"
-                           FontSize="{DynamicResource OgocDisplaySize}"
-                           FontWeight="SemiBold"
-                           VerticalAlignment="Center"
-                           AutomationProperties.HeadingLevel="Level1" />
+                <StackPanel Grid.Row="0" Grid.Column="0" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding PageTitle}"
+                               FontFamily="{StaticResource OgocDisplayFont}"
+                               FontSize="{DynamicResource OgocDisplaySize}"
+                               FontWeight="SemiBold"
+                               TextWrapping="Wrap"
+                               AutomationProperties.HeadingLevel="Level1" />
+                    <TextBlock Text="{Binding PageSubtitle}" Style="{StaticResource OgocCaption}" FontSize="{DynamicResource OgocBodySize}" Margin="1,2,0,0" />
+                </StackPanel>
 
                 <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <Label Content="Pro_file" Target="{Binding ElementName=ProfilePicker}" VerticalAlignment="Center"
@@ -140,7 +153,8 @@
                         Background="{DynamicResource SystemFillColorSuccessBackgroundBrush}">
                     <StackPanel Orientation="Horizontal">
                         <Ellipse Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center"
-                                 Fill="{DynamicResource SystemFillColorSuccessBrush}" />
+                                 Fill="{DynamicResource SystemFillColorSuccessBrush}"
+                                 a11y:Motion.Pulse="True" />
                         <TextBlock Text="{Binding HostStatus}"
                                    FontSize="{DynamicResource OgocSmallSize}"
                                    FontWeight="SemiBold"

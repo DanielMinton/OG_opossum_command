@@ -12,7 +12,7 @@
     <AnalysisLevel>latest-recommended</AnalysisLevel>
     <Deterministic>true</Deterministic>
     <LangVersion>latest</LangVersion>
-    <Version>0.2.1</Version>
+    <Version>0.3.0</Version>
     <Company>OG Opossum</Company>
     <Product>OG Opossum Command Central</Product>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>

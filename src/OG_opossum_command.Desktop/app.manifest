@@ -4,7 +4,7 @@
   Per-monitor DPI awareness and Windows 10/11 compatibility for WPF.
 -->
 <assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
-  <assemblyIdentity version="0.2.1.0" name="OG_opossum_command" />
+  <assemblyIdentity version="0.3.0.0" name="OG_opossum_command" />
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
     <security>
       <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">

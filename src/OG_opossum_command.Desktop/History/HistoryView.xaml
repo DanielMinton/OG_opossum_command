@@ -10,7 +10,7 @@
              d:DataContext="{d:DesignInstance Type=local:HistoryViewModel}"
              Focusable="False"
              AutomationProperties.Name="History">
-    <Grid>
+    <Grid a11y:Motion.Entrance="True">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />

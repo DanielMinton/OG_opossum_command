@@ -5,6 +5,9 @@
              xmlns:history="clr-namespace:OG_opossum_command.Desktop.History"
              xmlns:settings="clr-namespace:OG_opossum_command.Desktop.Settings"
              xmlns:sys="clr-namespace:System;assembly=System.Runtime"
+             xmlns:a11y="clr-namespace:OG_opossum_command.Desktop.Accessibility"
+             xmlns:fb="clr-namespace:OG_opossum_command.Desktop.Feedback"
+             xmlns:cue="clr-namespace:OG_opossum_command.Core.Feedback;assembly=OG_opossum_command.Core"
              ThemeMode="System"
              ShutdownMode="OnExplicitShutdown">
     <!-- No StartupUri: Program.Main decides whether a window is shown at all. -->
@@ -25,6 +28,8 @@
         <sys:Double x:Key="OgocDisplaySize">28</sys:Double>
         <!-- Not a font: the tile badge diameter, scaled with the text so its glyph always fits. -->
         <sys:Double x:Key="OgocBadgeSize">36</sys:Double>
+
+        <!-- OgocBadgeFill and OgocGlowFill (accent gradients) are built in code by Accessibility/AccentBrushes (ADR-057). -->
 
         <FontFamily x:Key="OgocIconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
         <FontFamily x:Key="OgocMonoFont">Cascadia Mono, Consolas</FontFamily>
@@ -72,6 +77,8 @@
             <Setter Property="Padding" Value="14,6" />
             <Setter Property="MinHeight" Value="32" />
             <Setter Property="FontSize" Value="{DynamicResource OgocBodySize}" />
+            <Setter Property="a11y:Motion.Press" Value="True" />
+            <Setter Property="fb:UiFeedback.Cue" Value="{x:Static cue:SoundCue.Tap}" />
         </Style>
 
         <Style x:Key="OgocAccentButton" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
@@ -79,7 +86,10 @@
             <Setter Property="Padding" Value="14,6" />
             <Setter Property="MinHeight" Value="32" />
             <Setter Property="FontSize" Value="{DynamicResource OgocBodySize}" />
+            <Setter Property="a11y:Motion.Press" Value="True" />
+            <Setter Property="fb:UiFeedback.Cue" Value="{x:Static cue:SoundCue.Tap}" />
         </Style>
+
 
         <Style x:Key="OgocCancel" TargetType="Button" BasedOn="{StaticResource OgocAccentButton}">
             <Setter Property="FontWeight" Value="SemiBold" />
@@ -87,10 +97,12 @@
             <Setter Property="MinHeight" Value="44" />
         </Style>
 
-        <!-- Workflow tile: a card that lifts its border to the accent colour on hover. -->
+        <!-- Workflow tile (ADR-057): a card with an accent glow layer that fades in on hover, lifts, sinks on press and
+             springs back (Motion.Press), and plays the Start cue from the view model. The glow is a separate layer, so
+             no brush is ever animated; under high contrast it is removed and the border alone shows hover. -->
         <Style x:Key="OgocTile" TargetType="Button">
             <Setter Property="FocusVisualStyle" Value="{StaticResource OgocFocusVisual}" />
-            <Setter Property="MinHeight" Value="92" />
+            <Setter Property="MinHeight" Value="104" />
             <Setter Property="Margin" Value="0,0,12,12" />
             <Setter Property="FontSize" Value="{DynamicResource OgocBodySize}" />
             <Setter Property="Cursor" Value="Hand" />
@@ -98,31 +110,54 @@
             <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+            <Setter Property="a11y:Motion.Press" Value="True" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bd"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="8"
-                                Padding="16,14"
-                                SnapsToDevicePixels="True">
-                            <ContentPresenter RecognizesAccessKey="True"
+                        <Grid>
+                            <Border x:Name="Bd"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="10"
+                                    SnapsToDevicePixels="True" />
+                            <Border x:Name="Glow"
+                                    Background="{DynamicResource OgocGlowFill}"
+                                    CornerRadius="10"
+                                    BorderThickness="1"
+                                    Opacity="0"
+                                    IsHitTestVisible="False"
+                                    BorderBrush="{DynamicResource AccentFillColorDefaultBrush}">
+                                </Border>
+                            <ContentPresenter Margin="16,14"
+                                              RecognizesAccessKey="True"
                                               HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
-                        </Border>
+                        </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
                                 <Setter TargetName="Bd" Property="Background" Value="{DynamicResource CardBackgroundFillColorSecondaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
                             </Trigger>
+                            <DataTrigger Binding="{Binding Path=(SystemParameters.HighContrast)}" Value="True">
+                                <Setter TargetName="Glow" Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding Path=(SystemParameters.HighContrast)}" Value="True" />
+                                    <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource Self}}" Value="True" />
+                                </MultiDataTrigger.Conditions>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
+                            </MultiDataTrigger>
                             <Trigger Property="IsEnabled" Value="False">
-                                <Setter TargetName="Bd" Property="Opacity" Value="0.45" />
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.5" />
+                                <Setter Property="Opacity" Value="0.75" />
                                 <Setter Property="Cursor" Value="Arrow" />
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -141,6 +176,8 @@
             <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="a11y:Motion.Press" Value="True" />
+            <Setter Property="fb:UiFeedback.Cue" Value="{x:Static cue:SoundCue.Navigate}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ButtonBase">
@@ -152,6 +189,7 @@
                             <Border x:Name="Pill" Width="3" Height="16" CornerRadius="1.5"
                                     HorizontalAlignment="Left" VerticalAlignment="Center"
                                     Background="{DynamicResource AccentFillColorDefaultBrush}"
+                                    a11y:Motion.Pop="True"
                                     Visibility="Collapsed" />
                         </Grid>
                         <ControlTemplate.Triggers>
@@ -209,6 +247,80 @@
             <Setter Property="FocusVisualStyle" Value="{StaticResource OgocFocusVisual}" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
+        </Style>
+
+        <!-- Display face for the greeting and the headline numbers; falls back to Segoe UI before Windows 11. -->
+        <FontFamily x:Key="OgocDisplayFont">Segoe UI Variable Display, Segoe UI</FontFamily>
+
+        <!-- Headline number card (ADR-057): label, big tabular number, one quiet line under it. -->
+        <Style x:Key="OgocStat" TargetType="Border" BasedOn="{StaticResource OgocCard}">
+            <Setter Property="Margin" Value="0,0,12,12" />
+            <Setter Property="Padding" Value="16,12,16,12" />
+            <Setter Property="a11y:Motion.Entrance" Value="True" />
+        </Style>
+
+        <Style x:Key="OgocStatNumber" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource OgocDisplayFont}" />
+            <Setter Property="FontSize" Value="{DynamicResource OgocDisplaySize}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Typography.NumeralAlignment" Value="Tabular" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="Margin" Value="0,2,0,0" />
+            <!-- Shown until Motion.CountTo has a number. -->
+            <Setter Property="Text" Value="—" />
+        </Style>
+
+        <!-- A key cap, e.g. Ctrl+1 on a tile. Decoration: screen readers get the shortcut from the tile's name. -->
+        <Style x:Key="OgocKeycap" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="1,1,1,2" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Padding" Value="6,1" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+        </Style>
+
+        <!-- Status chip for runs. The fill carries the colour; the text stays the primary text colour, so it reads in every theme. -->
+        <Style x:Key="OgocChip" TargetType="Border">
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="8,1,10,2" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Kind}" Value="ok">
+                    <Setter Property="Background" Value="{DynamicResource SystemFillColorSuccessBackgroundBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="bad">
+                    <Setter Property="Background" Value="{DynamicResource SystemFillColorCriticalBackgroundBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="warn">
+                    <Setter Property="Background" Value="{DynamicResource SystemFillColorCautionBackgroundBrush}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- The coloured dot inside a chip or beside a step. -->
+        <Style x:Key="OgocDot" TargetType="Ellipse">
+            <Setter Property="Width" Value="8" />
+            <Setter Property="Height" Value="8" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Fill" Value="{DynamicResource ControlStrongStrokeColorDefaultBrush}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Kind}" Value="ok">
+                    <Setter Property="Fill" Value="{DynamicResource SystemFillColorSuccessBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="bad">
+                    <Setter Property="Fill" Value="{DynamicResource SystemFillColorCriticalBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="warn">
+                    <Setter Property="Fill" Value="{DynamicResource SystemFillColorCautionBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="active">
+                    <Setter Property="Fill" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                    <Setter Property="a11y:Motion.Pulse" Value="True" />
+                </DataTrigger>
+            </Style.Triggers>
         </Style>
 
         <DataTemplate DataType="{x:Type dashboard:DashboardViewModel}">

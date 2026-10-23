@@ -2,6 +2,22 @@
 
 All notable changes to OG Opossum Command Central. Versions follow [SemVer](https://semver.org/).
 
+## 0.3.0 — 2026-10-23
+
+### Added
+
+- **Motion** (ADR-057): the dashboard's cards and tiles slide in one after another, tiles lift and
+  glow on hover and spring back when clicked, a ring spins on a tile while it runs and a check or
+  cross shows when it finishes, numbers count up, and the status dot breathes. Windows "Animation
+  effects" off, or a contrast theme, turns all of it off.
+- **Sounds** (ADR-057): a soft tick on clicks, two rising notes when a workflow starts, a chime when
+  it completes and two low notes when it fails. Made by the app itself; nothing is downloaded.
+  Off in Settings › Look and sound; in quiet mode only failures are heard; silent while hidden.
+- **Today at a glance**: runs today, success rate, runs needing attention and the next scheduled
+  workflow above the tiles. The dashboard title greets you and shows the date.
+- **Ctrl+1 to Ctrl+6** run the six tiles from any page; each tile shows its shortcut.
+- **Recent runs** show a coloured status chip per run.
+
 ## 0.2.1 — 2026-10-23
 
 ### Added

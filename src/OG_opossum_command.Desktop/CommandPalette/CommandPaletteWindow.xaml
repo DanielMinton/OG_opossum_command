@@ -17,7 +17,7 @@
         ShowInTaskbar="False"
         FontSize="{DynamicResource OgocBodySize}"
         AutomationProperties.Name="Command palette">
-    <Grid Margin="14">
+    <Grid Margin="14" a11y:Motion.Entrance="True">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />

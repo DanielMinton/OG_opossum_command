@@ -120,7 +120,8 @@ public static class Motion
 
         var begin = TimeSpan.FromMilliseconds(delay);
         var t = Transforms(element);
-        element.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, Medium) { BeginTime = begin, EasingFunction = EaseOut, FillBehavior = FillBehavior.Stop });
+        // No To: fade up to the element's own opacity (a disabled tile is dimmer), not to 1.
+        element.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation { From = 0, Duration = Medium, BeginTime = begin, EasingFunction = EaseOut, FillBehavior = FillBehavior.Stop });
         t.Translate.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(14, 0, Slow) { BeginTime = begin, EasingFunction = EaseOut, FillBehavior = FillBehavior.Stop });
     }
 
@@ -244,6 +245,14 @@ public static class Motion
 
     public static void SetPop(DependencyObject d, bool value) => d.SetValue(PopProperty, value);
 
+    /// <summary>The vertical scale a Pop starts from (0.2 by default; larger for big panels, so they settle rather than grow).</summary>
+    public static readonly DependencyProperty PopFromProperty = DependencyProperty.RegisterAttached(
+        "PopFrom", typeof(double), typeof(Motion), new PropertyMetadata(0.2));
+
+    public static double GetPopFrom(DependencyObject d) => (double)d.GetValue(PopFromProperty);
+
+    public static void SetPopFrom(DependencyObject d, double value) => d.SetValue(PopFromProperty, value);
+
     private static void OnPopChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is not UIElement element)
@@ -263,7 +272,7 @@ public static class Motion
         if (e.NewValue is true && IsEnabled && sender is FrameworkElement element)
         {
             var scale = Transforms(element).Scale;
-            scale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.2, 1, Slow) { EasingFunction = Spring, FillBehavior = FillBehavior.Stop });
+            scale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(GetPopFrom(element), 1, Slow) { EasingFunction = Spring, FillBehavior = FillBehavior.Stop });
             element.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, Fast) { FillBehavior = FillBehavior.Stop });
         }
     }
@@ -274,6 +283,9 @@ public static class Motion
         "Pulse", typeof(bool), typeof(Motion), new PropertyMetadata(false, OnLoopChanged));
 
     public static bool GetPulse(DependencyObject d) => (bool)d.GetValue(PulseProperty);
+
+    private static readonly DependencyProperty PulsingProperty = DependencyProperty.RegisterAttached(
+        "Pulsing", typeof(bool), typeof(Motion), new PropertyMetadata(false));
 
     public static void SetPulse(DependencyObject d, bool value) => d.SetValue(PulseProperty, value);
 
@@ -301,18 +313,24 @@ public static class Motion
     private static void UpdateLoops(FrameworkElement element)
     {
         var run = IsEnabled && element.IsVisible;
+        var pulsing = (bool)element.GetValue(PulsingProperty);
         if (run && GetPulse(element))
         {
-            element.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(1, 0.35, new Duration(TimeSpan.FromMilliseconds(1300)))
+            if (!pulsing)
             {
-                AutoReverse = true,
-                RepeatBehavior = RepeatBehavior.Forever,
-                EasingFunction = Breathe,
-            });
+                element.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(1, 0.35, new Duration(TimeSpan.FromMilliseconds(1300)))
+                {
+                    AutoReverse = true,
+                    RepeatBehavior = RepeatBehavior.Forever,
+                    EasingFunction = Breathe,
+                });
+                element.SetValue(PulsingProperty, true);
+            }
         }
-        else if (GetPulse(element))
+        else if (pulsing)
         {
             element.BeginAnimation(UIElement.OpacityProperty, null);
+            element.SetValue(PulsingProperty, false);
         }
 
         var rotate = Transforms(element).Rotate;
