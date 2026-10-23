@@ -17,12 +17,12 @@
         AutomationProperties.Name="OG Opossum Command Central">
     <!-- Ctrl+1..6 run the dashboard tiles from any page (ADR-057). -->
     <Window.InputBindings>
-        <KeyBinding Modifiers="Ctrl" Key="D1" Command="{Binding Dashboard.RunAtCommand}" CommandParameter="1" />
-        <KeyBinding Modifiers="Ctrl" Key="D2" Command="{Binding Dashboard.RunAtCommand}" CommandParameter="2" />
-        <KeyBinding Modifiers="Ctrl" Key="D3" Command="{Binding Dashboard.RunAtCommand}" CommandParameter="3" />
-        <KeyBinding Modifiers="Ctrl" Key="D4" Command="{Binding Dashboard.RunAtCommand}" CommandParameter="4" />
-        <KeyBinding Modifiers="Ctrl" Key="D5" Command="{Binding Dashboard.RunAtCommand}" CommandParameter="5" />
-        <KeyBinding Modifiers="Ctrl" Key="D6" Command="{Binding Dashboard.RunAtCommand}" CommandParameter="6" />
+        <KeyBinding Modifiers="Ctrl" Key="D1" Command="{Binding RunTileCommand}" CommandParameter="1" />
+        <KeyBinding Modifiers="Ctrl" Key="D2" Command="{Binding RunTileCommand}" CommandParameter="2" />
+        <KeyBinding Modifiers="Ctrl" Key="D3" Command="{Binding RunTileCommand}" CommandParameter="3" />
+        <KeyBinding Modifiers="Ctrl" Key="D4" Command="{Binding RunTileCommand}" CommandParameter="4" />
+        <KeyBinding Modifiers="Ctrl" Key="D5" Command="{Binding RunTileCommand}" CommandParameter="5" />
+        <KeyBinding Modifiers="Ctrl" Key="D6" Command="{Binding RunTileCommand}" CommandParameter="6" />
     </Window.InputBindings>
     <!-- Layout (ADR-055): navigation rail on the left, page header and the current view on the right.
          No window Background: the Fluent theme paints it (Mica on Windows 11). -->
@@ -153,8 +153,7 @@
                         Background="{DynamicResource SystemFillColorSuccessBackgroundBrush}">
                     <StackPanel Orientation="Horizontal">
                         <Ellipse Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center"
-                                 Fill="{DynamicResource SystemFillColorSuccessBrush}"
-                                 a11y:Motion.Pulse="True" />
+                                 Fill="{DynamicResource SystemFillColorSuccessBrush}" />
                         <TextBlock Text="{Binding HostStatus}"
                                    FontSize="{DynamicResource OgocSmallSize}"
                                    FontWeight="SemiBold"

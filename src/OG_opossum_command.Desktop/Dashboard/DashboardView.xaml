@@ -127,8 +127,7 @@
                                     </Ellipse.Style>
                                 </Ellipse>
                                 <TextBlock FontFamily="{StaticResource OgocIconFont}" FontSize="{DynamicResource OgocBodySize}"
-                                           HorizontalAlignment="Center" VerticalAlignment="Center"
-                                           a11y:Motion.Pop="True">
+                                           HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
                                             <Setter Property="Text" Value="&#xE768;" />
@@ -238,7 +237,10 @@
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <Ellipse Grid.Column="0" Style="{StaticResource OgocDot}" Margin="2,0,12,0" />
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="2,0,10,0">
+                                        <Ellipse Style="{StaticResource OgocDot}" Margin="0,0,8,0" />
+                                        <TextBlock Text="{Binding Glyph}" FontWeight="Bold" MinWidth="12" VerticalAlignment="Center" />
+                                    </StackPanel>
                                     <TextBlock Grid.Column="1" Text="{Binding Text}" TextWrapping="Wrap" VerticalAlignment="Center" />
                                 </Grid>
                             </DataTemplate>
@@ -464,7 +466,6 @@
                     </TextBlock.Visibility>
                 </TextBlock>
                 <ListBox ItemsSource="{Binding RecentRuns}"
-                         AlternationCount="8"
                          BorderThickness="0"
                          Background="Transparent"
                          HorizontalContentAlignment="Stretch"
@@ -476,7 +477,7 @@
                          AutomationProperties.Name="Recent runs">
                     <ListBox.ItemTemplate>
                         <DataTemplate DataType="{x:Type local:RunSummary}">
-                            <Grid Margin="0,4" a11y:Motion.Entrance="True" a11y:Motion.EntranceDelay="360" a11y:Motion.Stagger="30">
+                            <Grid Margin="0,4">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" MinWidth="128" />
                                     <ColumnDefinition Width="*" />

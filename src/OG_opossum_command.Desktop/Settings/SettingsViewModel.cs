@@ -122,6 +122,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         HotkeyStatus = string.Empty;
         Refresh();
         host.Exports.Changed += OnExportsChanged;
+        Accessibility.Motion.EnabledChanged += () => OnPropertyChanged(nameof(AnimationsNote));
         _ready = true;
     }
 
@@ -155,7 +156,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     public partial bool Animations { get; set; }
 
     /// <summary>Explains when Windows is holding animations off even though the setting is on.</summary>
-    public string AnimationsNote => Animations && !Accessibility.Motion.IsEnabled
+    public string AnimationsNote => Animations && !Accessibility.Motion.IsEnabled && !Accessibility.Motion.ForceDisabled
         ? "Windows has animation effects off or high contrast on, so nothing moves. That setting wins."
         : string.Empty;
 
@@ -163,10 +164,13 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         if (_ready)
         {
-            _host.History.SetSetting(SettingKeys.Sounds, value ? "true" : "false");
+            var setting = value ? "true" : "false";
+            _host.History.SetSetting(SettingKeys.Sounds, setting);
+            UiFeedback.UpdateSettings(setting, QuietMode);
             if (value)
             {
-                UiFeedback.Play(SoundCue.Success);
+                // A preview even in quiet mode, so turning sounds on is never met with silence.
+                UiFeedback.Preview(SoundCue.Success);
             }
         }
     }
@@ -231,6 +235,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         if (_ready)
         {
             _notifications.QuietMode = value;
+            UiFeedback.UpdateSettings(Sounds ? "true" : "false", value);
             Changed?.Invoke();
         }
     }

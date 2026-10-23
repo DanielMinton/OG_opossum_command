@@ -29,6 +29,7 @@ public partial class App : Application, IDashboardPresenter
     private GlobalHotkey? _hotkey;
     private NotificationService? _notifications;
     private SoundCuePlayer? _sounds;
+    private DispatcherTimer? _clock;
     private CommandPaletteWindow? _palette;
     private bool _quitting;
 
@@ -129,6 +130,7 @@ public partial class App : Application, IDashboardPresenter
         }
 
         _quitting = true;
+        _clock?.Stop();
         _hotkey?.Dispose();
         _sounds?.Dispose();
         _hotkey = null;
@@ -181,13 +183,14 @@ public partial class App : Application, IDashboardPresenter
         if (!SmokeUi)
         {
             _sounds = new SoundCuePlayer();
-            var history = Host.History;
-            var notifications = _notifications;
-            UiFeedback.Install(_sounds, () => history.GetSetting(SettingKeys.Sounds), () => notifications.QuietMode);
+            UiFeedback.Install(_sounds, Host.History.GetSetting(SettingKeys.Sounds), _notifications.QuietMode);
             _ = _sounds.LoadAsync();
         }
 
         Shell = new ShellViewModel(Host, Dispatcher, this, _notifications);
+        var shell = Shell;
+        _clock = new DispatcherTimer(TimeSpan.FromMinutes(1), DispatcherPriority.Background, (_, _) => shell.Tick(), Dispatcher);
+        _clock.Start();
         var window = new MainWindow { DataContext = Shell };
         MainWindow = window;
         window.Closing += (_, args) =>
@@ -224,6 +227,7 @@ public partial class App : Application, IDashboardPresenter
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _clock?.Stop();
         _hotkey?.Dispose();
         _sounds?.Dispose();
         _tray?.Dispose();

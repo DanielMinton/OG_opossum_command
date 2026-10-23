@@ -26,8 +26,7 @@ public sealed partial class DashboardViewModel : ObservableObject
 
     private const int RecentRunLimit = 8;
 
-    /// <summary>How many recent runs are read to count today's (more than a day's runs is unusual for a personal tool).</summary>
-    private const int TodayScanLimit = 200;
+    private readonly Dictionary<string, DispatcherTimer> _flashTimers = [];
 
     private readonly CoreHost _host;
     private readonly Dispatcher _dispatcher;
@@ -179,20 +178,37 @@ public sealed partial class DashboardViewModel : ObservableObject
     /// <summary>Re-reads recent runs and today's numbers for the active profile from history.</summary>
     public void RefreshRecentRuns()
     {
-        var recent = _host.History.GetRecentExecutions(_profile, TodayScanLimit);
-        RecentRuns.Clear();
-        foreach (var execution in recent.Take(RecentRunLimit))
+        // Rows are updated in place where they match, so an unchanged list does not replay its entrance.
+        var rows = _host.History.GetRecentExecutions(_profile, RecentRunLimit).Select(RunSummary.From).ToList();
+        for (var i = 0; i < rows.Count; i++)
         {
-            RecentRuns.Add(RunSummary.From(execution));
+            if (i < RecentRuns.Count)
+            {
+                if (RecentRuns[i] != rows[i])
+                {
+                    RecentRuns[i] = rows[i];
+                }
+            }
+            else
+            {
+                RecentRuns.Add(rows[i]);
+            }
         }
 
-        var today = DateTime.Today;
-        var finishedToday = recent
-            .Where(e => !e.IsActive && (e.StartedAt ?? e.QueuedAt).ToLocalTime().Date == today)
-            .ToList();
-        RunsToday = finishedToday.Count;
-        var succeeded = finishedToday.Count(e => e.Status == ExecutionStatus.Completed);
-        SuccessRate = finishedToday.Count == 0 ? double.NaN : Math.Round(100.0 * succeeded / finishedToday.Count);
+        while (RecentRuns.Count > rows.Count)
+        {
+            RecentRuns.RemoveAt(RecentRuns.Count - 1);
+        }
+
+        RefreshTodayCounts();
+    }
+
+    /// <summary>Today's headline numbers: a count query, no steps read.</summary>
+    public void RefreshTodayCounts()
+    {
+        var counts = _host.History.CountFinishedSince(_profile, new DateTimeOffset(DateTime.Today));
+        RunsToday = counts.Finished;
+        SuccessRate = counts.Finished == 0 ? double.NaN : Math.Round(100.0 * counts.Completed / counts.Finished);
     }
 
     /// <summary>Finished runs today in the active profile (the first headline number).</summary>
@@ -224,6 +240,13 @@ public sealed partial class DashboardViewModel : ObservableObject
     {
         if (int.TryParse(position, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) && n >= 1 && n <= Tiles.Count)
         {
+            if (Tiles[n - 1].IsPlaceholder)
+            {
+                StatusMessage = string.Create(CultureInfo.CurrentCulture, $"Slot {n} is empty. {Tiles[n - 1].Description}.");
+                UiFeedback.Play(SoundCue.Tap);
+                return;
+            }
+
             Run(Tiles[n - 1]);
         }
     }
@@ -240,14 +263,22 @@ public sealed partial class DashboardViewModel : ObservableObject
     private void FlashTileResult(string workflowId, TileState state)
     {
         SetTileState(workflowId, state);
-        var timer = new DispatcherTimer(TimeSpan.FromSeconds(3), DispatcherPriority.Background, (s, _) =>
+
+        // One timer per workflow, restarted by each result, so a second result is shown for its full 3 seconds.
+        if (!_flashTimers.TryGetValue(workflowId, out var timer))
         {
-            ((DispatcherTimer)s!).Stop();
-            foreach (var tile in Tiles.Where(t => t.WorkflowId == workflowId && t.State == state))
+            timer = new DispatcherTimer(TimeSpan.FromSeconds(3), DispatcherPriority.Background, (s, _) =>
             {
-                tile.State = TileState.Idle;
-            }
-        }, _dispatcher);
+                ((DispatcherTimer)s!).Stop();
+                foreach (var tile in Tiles.Where(t => t.WorkflowId == workflowId && t.State is TileState.Succeeded or TileState.Failed))
+                {
+                    tile.State = TileState.Idle;
+                }
+            }, _dispatcher);
+            _flashTimers[workflowId] = timer;
+        }
+
+        timer.Stop();
         timer.Start();
     }
 
@@ -564,7 +595,6 @@ public sealed partial class DashboardViewModel : ObservableObject
                 StatusMessage = snapshot.Error is null
                     ? $"{snapshot.WorkflowName}: {StatusText(snapshot.Status)}."
                     : $"{snapshot.WorkflowName}: {StatusText(snapshot.Status)}. {snapshot.Error}";
-                RefreshRecentRuns();
 
                 // Keep showing the finished run until another one starts, unless one is already active.
                 var next = _host.Engine.ActiveExecutions.LastOrDefault(e => e.Profile == _profile);

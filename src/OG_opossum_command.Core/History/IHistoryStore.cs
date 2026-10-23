@@ -38,6 +38,12 @@ public interface IHistoryStore : IDisposable
     /// <summary>Most recent runs, newest first, optionally scoped to one profile.</summary>
     IReadOnlyList<ExecutionSnapshot> GetRecentExecutions(ProfileId? profile, int limit);
 
+    /// <summary>
+    /// How many of <paramref name="profile"/>'s runs that started at or after <paramref name="since"/> have finished, and
+    /// how many of those completed. A count only (no steps are read), for the dashboard's headline numbers.
+    /// </summary>
+    RunCounts CountFinishedSince(ProfileId profile, DateTimeOffset since);
+
     /// <summary>Runs in one status, newest first (used for Needs attention), optionally scoped to one profile.</summary>
     IReadOnlyList<ExecutionSnapshot> GetExecutionsByStatus(ExecutionStatus status, ProfileId? profile, int limit);
 
@@ -69,6 +75,9 @@ public interface IHistoryStore : IDisposable
 
     void SetSetting(string key, string value);
 }
+
+/// <summary>Finished runs and, of those, the ones that completed.</summary>
+public readonly record struct RunCounts(int Finished, int Completed);
 
 /// <summary>Keys of the <c>settings</c> table that Core and the UI share.</summary>
 public static class SettingKeys

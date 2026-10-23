@@ -18,6 +18,23 @@ public sealed class SqliteHistoryStoreTests : IDisposable
     }
 
     [Fact]
+    public void CountFinishedSince_counts_only_finished_runs_of_the_profile_since_the_cutoff()
+    {
+        using var store = SqliteHistoryStore.Open(_root.Paths.DatabasePath);
+        var cutoff = new DateTimeOffset(2026, 10, 22, 0, 0, 0, TimeSpan.FromHours(-7));
+        var today = cutoff.AddHours(9);
+        store.SaveExecution(Snapshot(Guid.NewGuid(), ExecutionStatus.Completed, queuedAt: today));
+        store.SaveExecution(Snapshot(Guid.NewGuid(), ExecutionStatus.Completed, queuedAt: today.AddMinutes(5)));
+        store.SaveExecution(Snapshot(Guid.NewGuid(), ExecutionStatus.Failed, queuedAt: today.AddMinutes(10)));
+        store.SaveExecution(Snapshot(Guid.NewGuid(), ExecutionStatus.Running, queuedAt: today.AddMinutes(15)));
+        store.SaveExecution(Snapshot(Guid.NewGuid(), ExecutionStatus.Completed, queuedAt: cutoff.AddMinutes(-1)));
+        store.SaveExecution(Snapshot(Guid.NewGuid(), ExecutionStatus.Completed, ProfileId.Personal, today));
+
+        Assert.Equal(new RunCounts(3, 2), store.CountFinishedSince(ProfileId.Work, cutoff));
+        Assert.Equal(new RunCounts(0, 0), store.CountFinishedSince(ProfileId.Work, today.AddDays(1)));
+    }
+
+    [Fact]
     public void Open_creates_the_file_runs_migrations_and_uses_WAL()
     {
         using var store = SqliteHistoryStore.Open(_root.Paths.DatabasePath);

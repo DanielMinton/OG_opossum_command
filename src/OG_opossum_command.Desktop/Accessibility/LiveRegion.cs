@@ -55,8 +55,12 @@ public static class LiveRegion
     {
         if (sender is TextBlock { Text.Length: > 0 } text)
         {
-            var peer = UIElementAutomationPeer.FromElement(text) ?? UIElementAutomationPeer.CreatePeerForElement(text);
-            peer?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
+            // After layout: a line collapsed while empty (ADR-057) has only just become visible when its text arrives.
+            text.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, () =>
+            {
+                var peer = UIElementAutomationPeer.FromElement(text) ?? UIElementAutomationPeer.CreatePeerForElement(text);
+                peer?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
+            });
         }
     }
 }

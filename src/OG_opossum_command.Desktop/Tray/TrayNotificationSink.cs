@@ -2,6 +2,7 @@ using System.Windows.Threading;
 using H.NotifyIcon;
 using H.NotifyIcon.Core;
 using OG_opossum_command.Core.Notifications;
+using OG_opossum_command.Desktop.Feedback;
 
 namespace OG_opossum_command.Desktop.Tray;
 
@@ -43,7 +44,8 @@ internal sealed class TrayNotificationSink : INotificationSink
             };
             try
             {
-                icon.ShowNotification(notification.Title, notification.Message, kind);
+                // Silent while the app sounds the result itself (window visible, Sounds on), so it is never chime plus ding (ADR-057).
+                icon.ShowNotification(notification.Title, notification.Message, kind, sound: !UiFeedback.PlaysResultSounds);
             }
             catch (InvalidOperationException)
             {

@@ -399,6 +399,29 @@ public sealed class SqliteHistoryStore : IHistoryStore
         }
     }
 
+    public RunCounts CountFinishedSince(ProfileId profile, DateTimeOffset since)
+    {
+        lock (_gate)
+        {
+            using var command = _connection.CreateCommand();
+            // Times are stored as UTC round-trip strings, so they compare correctly as text.
+            command.CommandText = """
+                SELECT COUNT(*), COALESCE(SUM(status = $completed), 0) FROM executions
+                WHERE profile_id = $profile AND finished_at IS NOT NULL AND COALESCE(started_at, queued_at) >= $since
+                  AND status NOT IN ($queued, $running, $cancelling);
+                """;
+            command.Parameters.AddWithValue("$profile", profile.ToJsonValue());
+            command.Parameters.AddWithValue("$since", Format(since));
+            command.Parameters.AddWithValue("$completed", nameof(ExecutionStatus.Completed));
+            command.Parameters.AddWithValue("$queued", nameof(ExecutionStatus.Queued));
+            command.Parameters.AddWithValue("$running", nameof(ExecutionStatus.Running));
+            command.Parameters.AddWithValue("$cancelling", nameof(ExecutionStatus.Cancelling));
+            using var reader = command.ExecuteReader();
+            reader.Read();
+            return new RunCounts(reader.GetInt32(0), reader.GetInt32(1));
+        }
+    }
+
     public IReadOnlyList<ExecutionSnapshot> GetExecutionsByStatus(ExecutionStatus status, ProfileId? profile, int limit)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);

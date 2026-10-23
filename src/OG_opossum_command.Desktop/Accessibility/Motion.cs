@@ -51,8 +51,66 @@ public static class Motion
         Recompute();
     }
 
-    private static void Recompute() =>
-        IsEnabled = !ForceDisabled && FeedbackPolicy.MotionEnabled(SystemParameters.ClientAreaAnimation, SystemParameters.HighContrast, s_setting);
+    /// <summary>Raised when <see cref="IsEnabled"/> flips (Windows setting, high contrast, or the app setting).</summary>
+    public static event Action? EnabledChanged;
+
+    // Elements with endless or hover animations, so a change of IsEnabled reaches them at once (ADR-057: one gate).
+    private static readonly List<WeakReference<FrameworkElement>> s_tracked = [];
+
+    private static void Recompute()
+    {
+        var enabled = !ForceDisabled && FeedbackPolicy.MotionEnabled(SystemParameters.ClientAreaAnimation, SystemParameters.HighContrast, s_setting);
+        if (enabled == IsEnabled)
+        {
+            return;
+        }
+
+        IsEnabled = enabled;
+        s_tracked.RemoveAll(w => !w.TryGetTarget(out _));
+        foreach (var weak in s_tracked.ToList())
+        {
+            if (weak.TryGetTarget(out var element))
+            {
+                if (!enabled)
+                {
+                    ResetTransforms(element);
+                }
+
+                UpdateLoops(element);
+            }
+        }
+
+        EnabledChanged?.Invoke();
+    }
+
+    private static void Track(FrameworkElement element)
+    {
+        if (!(bool)element.GetValue(TrackedProperty))
+        {
+            element.SetValue(TrackedProperty, true);
+            s_tracked.Add(new WeakReference<FrameworkElement>(element));
+        }
+    }
+
+    private static readonly DependencyProperty TrackedProperty = DependencyProperty.RegisterAttached(
+        "Tracked", typeof(bool), typeof(Motion), new PropertyMetadata(false));
+
+    /// <summary>Puts a hovered or pressed element back to rest, with no animation.</summary>
+    private static void ResetTransforms(FrameworkElement element)
+    {
+        if (element.GetValue(TransformSetProperty) is TransformSet t)
+        {
+            t.Scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+            t.Scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+            t.Translate.BeginAnimation(TranslateTransform.YProperty, null);
+        }
+
+        if (element is Control { Template: { } template } control && template.FindName("Glow", control) is UIElement glow)
+        {
+            glow.BeginAnimation(UIElement.OpacityProperty, null);
+            glow.Opacity = element.IsMouseOver && element.IsEnabled ? 1 : 0;
+        }
+    }
 
     private static T Freeze<T>(T freezable)
         where T : Freezable
@@ -118,12 +176,24 @@ public static class Motion
             delay += ItemsControl.GetAlternationIndex(container) * stagger;
         }
 
-        var begin = TimeSpan.FromMilliseconds(delay);
+        // Key frames hold the start values from t=0 until the delay, so a staggered element stays hidden until its
+        // turn instead of showing, vanishing and fading in. Opacity ends at the element's own value (a disabled tile is dimmer).
+        var wait = TimeSpan.FromMilliseconds(delay);
         var t = Transforms(element);
-        // No To: fade up to the element's own opacity (a disabled tile is dimmer), not to 1.
-        element.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation { From = 0, Duration = Medium, BeginTime = begin, EasingFunction = EaseOut, FillBehavior = FillBehavior.Stop });
-        t.Translate.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(14, 0, Slow) { BeginTime = begin, EasingFunction = EaseOut, FillBehavior = FillBehavior.Stop });
+        element.BeginAnimation(UIElement.OpacityProperty, Held(0, element.Opacity, wait, Medium.TimeSpan));
+        t.Translate.BeginAnimation(TranslateTransform.YProperty, Held(14, 0, wait, Slow.TimeSpan));
     }
+
+    private static DoubleAnimationUsingKeyFrames Held(double from, double to, TimeSpan wait, TimeSpan duration) => new()
+    {
+        FillBehavior = FillBehavior.Stop,
+        KeyFrames =
+        {
+            new DiscreteDoubleKeyFrame(from, KeyTime.FromTimeSpan(TimeSpan.Zero)),
+            new DiscreteDoubleKeyFrame(from, KeyTime.FromTimeSpan(wait)),
+            new EasingDoubleKeyFrame(to, KeyTime.FromTimeSpan(wait + duration), EaseOut),
+        },
+    };
 
     private static DependencyObject? FindContainer(DependencyObject element)
     {
@@ -161,6 +231,7 @@ public static class Motion
         element.LostMouseCapture -= OnPressUp;
         if ((bool)e.NewValue)
         {
+            Track(element);
             element.MouseEnter += OnHoverEnter;
             element.MouseLeave += OnHoverLeave;
             element.PreviewMouseLeftButtonDown += OnPressDown;
@@ -303,6 +374,7 @@ public static class Motion
             return;
         }
 
+        Track(element);
         element.IsVisibleChanged -= OnLoopVisible;
         element.IsVisibleChanged += OnLoopVisible;
         UpdateLoops(element);
@@ -383,7 +455,8 @@ public static class Motion
             return;
         }
 
-        var from = e.OldValue is double old && !double.IsNaN(old) ? old : 0;
+        // Count on from the number on screen, so a second update mid-count does not jump.
+        var from = e.OldValue is double old && !double.IsNaN(old) ? (double)text.GetValue(CountShownProperty) : 0;
         if (IsEnabled && Math.Abs(to - from) >= 1)
         {
             text.BeginAnimation(CountShownProperty, new DoubleAnimation(from, to, Slow) { EasingFunction = EaseOut });

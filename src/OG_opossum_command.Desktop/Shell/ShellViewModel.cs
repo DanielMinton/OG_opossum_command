@@ -162,6 +162,37 @@ public sealed partial class ShellViewModel : ObservableObject
         CurrentView = Settings;
     }
 
+    /// <summary>Ctrl+1..6: shows the dashboard (where the run and its result are visible), then runs that tile.</summary>
+    [RelayCommand]
+    private void RunTile(string? position)
+    {
+        if (CurrentView is not DashboardViewModel)
+        {
+            ShowDashboard();
+        }
+
+        Dashboard.RunAtCommand.Execute(position);
+    }
+
+    /// <summary>
+    /// Called once a minute: keeps the greeting and date current in an app left open all day, and rolls the
+    /// headline numbers over at midnight.
+    /// </summary>
+    public void Tick()
+    {
+        var today = DateTime.Today;
+        if (today != _lastDay)
+        {
+            _lastDay = today;
+            Dashboard.RefreshTodayCounts();
+        }
+
+        OnPropertyChanged(nameof(PageTitle));
+        OnPropertyChanged(nameof(PageSubtitle));
+    }
+
+    private DateTime _lastDay = DateTime.Today;
+
     [RelayCommand]
     private void OpenPalette() => _app.ShowCommandPalette();
 

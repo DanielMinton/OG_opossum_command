@@ -59,6 +59,8 @@ internal sealed class FlakyHistoryStore : IHistoryStore
 
     public IReadOnlyList<ExecutionSnapshot> GetRecentExecutions(ProfileId? profile, int limit) => _inner.GetRecentExecutions(profile, limit);
 
+    public RunCounts CountFinishedSince(ProfileId profile, DateTimeOffset since) => _inner.CountFinishedSince(profile, since);
+
     public IReadOnlyList<ExecutionSnapshot> GetExecutionsByStatus(ExecutionStatus status, ProfileId? profile, int limit) => _inner.GetExecutionsByStatus(status, profile, limit);
 
     public ExecutionSnapshot? GetExecution(Guid executionId) => _inner.GetExecution(executionId);
