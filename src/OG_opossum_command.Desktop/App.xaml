@@ -4,9 +4,40 @@
              xmlns:dashboard="clr-namespace:OG_opossum_command.Desktop.Dashboard"
              xmlns:history="clr-namespace:OG_opossum_command.Desktop.History"
              xmlns:settings="clr-namespace:OG_opossum_command.Desktop.Settings"
+             xmlns:sys="clr-namespace:System;assembly=System.Runtime"
              ShutdownMode="OnExplicitShutdown">
     <!-- No StartupUri: Program.Main decides whether a window is shown at all. -->
     <Application.Resources>
+
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+
+        <!-- Font sizes: rewritten at startup and on settings change by Accessibility/FontScale (system message font). -->
+        <sys:Double x:Key="OgocBodySize">14</sys:Double>
+        <sys:Double x:Key="OgocSmallSize">12</sys:Double>
+        <sys:Double x:Key="OgocHeadingSize">13</sys:Double>
+        <sys:Double x:Key="OgocLargeSize">16</sys:Double>
+        <sys:Double x:Key="OgocTitleSize">20</sys:Double>
+
+        <!-- Focus ring for list rows: inside the row so neighbours do not overlap it. -->
+        <Style x:Key="OgocItemFocusVisual">
+            <Setter Property="Control.Template">
+                <Setter.Value>
+                    <ControlTemplate>
+                        <Rectangle StrokeThickness="2"
+                                   Stroke="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}"
+                                   SnapsToDevicePixels="True" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ListViewItem" BasedOn="{StaticResource {x:Type ListViewItem}}">
+            <Setter Property="FocusVisualStyle" Value="{StaticResource OgocItemFocusVisual}" />
+        </Style>
+
+        <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+            <Setter Property="FocusVisualStyle" Value="{StaticResource OgocItemFocusVisual}" />
+        </Style>
 
         <!-- Colours come from SystemColors so Windows high-contrast themes apply automatically. -->
         <Style x:Key="OgocFocusVisual">
@@ -26,7 +57,7 @@
             <Setter Property="FocusVisualStyle" Value="{StaticResource OgocFocusVisual}" />
             <Setter Property="Padding" Value="14,8" />
             <Setter Property="MinHeight" Value="36" />
-            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontSize" Value="{DynamicResource OgocBodySize}" />
             <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}" />
             <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" />
             <Setter Property="BorderBrush" Value="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}" />
@@ -35,7 +66,7 @@
         <Style x:Key="OgocTile" TargetType="Button" BasedOn="{StaticResource OgocButton}">
             <Setter Property="MinHeight" Value="84" />
             <Setter Property="Margin" Value="6" />
-            <Setter Property="FontSize" Value="16" />
+            <Setter Property="FontSize" Value="{DynamicResource OgocLargeSize}" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
@@ -49,7 +80,7 @@
         </Style>
 
         <Style x:Key="OgocHeading" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontSize" Value="{DynamicResource OgocHeadingSize}" />
             <Setter Property="FontWeight" Value="Bold" />
             <Setter Property="Margin" Value="0,0,0,6" />
             <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}" />

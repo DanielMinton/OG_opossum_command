@@ -34,6 +34,7 @@ public static partial class CalendarFileParser
     {
         CommentHandling = JsonCommentHandling.Skip,
         AllowTrailingCommas = true,
+        AllowDuplicateProperties = false,
     };
 
     /// <summary>Parses the file text. <paramref name="source"/> labels errors (the file path).</summary>
@@ -151,7 +152,7 @@ public static partial class CalendarFileParser
             }
             else
             {
-                reader.AddError("link", $"'link' must be an absolute https:// address or empty (got '{linkText}').");
+                reader.AddError("link", "'link' must be an absolute https:// address or empty. The value is not shown because meeting links can carry tokens.");
                 return null;
             }
         }

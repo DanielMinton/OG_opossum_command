@@ -70,6 +70,9 @@ internal sealed class TrayIcon : IDisposable
         };
         _icon.TrayMouseDoubleClick += (_, _) => app.ShowDashboard();
         _icon.TrayLeftMouseUp += (_, _) => app.ShowDashboard();
+        // Win+B, arrow to the icon, Enter or Space: keyboard users get the same as a click.
+        _icon.TrayKeyboardKeySelect += (_, _) => app.ShowDashboard();
+        _icon.TrayKeyboardSelect += (_, _) => app.ShowDashboard();
         _icon.ForceCreate();
     }
 

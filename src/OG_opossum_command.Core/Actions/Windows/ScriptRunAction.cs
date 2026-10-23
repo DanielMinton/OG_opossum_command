@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using OG_opossum_command.Core.Actions.Launchers;
@@ -18,7 +19,10 @@ public enum ScriptInterpreter
 /// <summary>Inputs of <see cref="ScriptRunAction"/>.</summary>
 /// <param name="Interpreter">Which interpreter runs the script.</param>
 /// <param name="Script">Bare file name inside the profile's <c>scripts</c> folder; never a path.</param>
-/// <param name="Arguments">Argument array appended after the script path; no shell parsing.</param>
+/// <param name="Arguments">
+/// Argument array appended after the script path. For PowerShell it is passed as-is with <c>%VAR%</c> expanded. For cmd,
+/// which re-parses its command line, no argument may contain <c>&amp; | &lt; &gt; ^ % ! " ( )</c> or a line break.
+/// </param>
 public sealed record ScriptRunInputs(ScriptInterpreter Interpreter, string Script, IReadOnlyList<string> Arguments);
 
 /// <summary>
@@ -33,6 +37,8 @@ public sealed partial class ScriptRunAction : WorkflowAction<ScriptRunInputs>
 
     /// <summary>Stable error code when PowerShell refused to run the script because of execution policy.</summary>
     public const string ExecutionPolicyBlockedCode = "execution-policy-blocked";
+
+    private static readonly SearchValues<char> CmdMetacharacters = SearchValues.Create("&|<>^%!\"()\r\n");
 
     private readonly IProcessLauncher _launcher;
 
@@ -99,10 +105,34 @@ public sealed partial class ScriptRunAction : WorkflowAction<ScriptRunInputs>
                     inputs.AddError("script", $"'script' must end in {string.Join(" or ", expected)} for the {interpreterText} interpreter (got '{script}').");
                     script = null;
                 }
+                else if (interpreter == ScriptInterpreter.Cmd && script.Contains(' ', StringComparison.Ordinal))
+                {
+                    inputs.AddError("script", $"'script' may not contain spaces for the cmd interpreter (got '{script}'); rename the file, for example with '-' or '_'.");
+                    script = null;
+                }
             }
         }
 
+        if (interpreter == ScriptInterpreter.Cmd && CmdArgumentProblem(arguments) is { } problem)
+        {
+            inputs.AddError("arguments", problem);
+        }
+
         return interpreter is null || script is null ? null : new ScriptRunInputs(interpreter.Value, script, arguments);
+    }
+
+    /// <summary>
+    /// Why <paramref name="arguments"/> cannot be handed to <c>cmd.exe</c>, or <c>null</c> when they can. cmd parses its
+    /// command line again after <c>/c</c>, so an argument array is only an argument array when no argument carries a
+    /// character cmd treats specially (ADR-031).
+    /// </summary>
+    public static string? CmdArgumentProblem(IEnumerable<string> arguments)
+    {
+        ArgumentNullException.ThrowIfNull(arguments);
+        var bad = arguments.FirstOrDefault(a => a.AsSpan().ContainsAny(CmdMetacharacters));
+        return bad is null
+            ? null
+            : $"cmd arguments may not contain & | < > ^ % ! \" ( ) or line breaks, because cmd.exe would interpret them (got '{bad.ReplaceLineEndings(" ")}'). Use the powershell interpreter for parameterised scripts.";
     }
 
     public override async Task<ActionResult> ExecuteAsync(ScriptRunInputs inputs, ActionContext context, CancellationToken cancellationToken)
@@ -128,6 +158,7 @@ public sealed partial class ScriptRunAction : WorkflowAction<ScriptRunInputs>
             return ActionResult.Failure("interpreter-not-found", $"Interpreter not found: {interpreterPath}");
         }
 
+        var expandedArguments = inputs.Arguments.Select(Environment.ExpandEnvironmentVariables).ToList();
         var arguments = new List<string>();
         if (inputs.Interpreter == ScriptInterpreter.PowerShell)
         {
@@ -136,10 +167,19 @@ public sealed partial class ScriptRunAction : WorkflowAction<ScriptRunInputs>
         }
         else
         {
-            arguments.AddRange(["/d", "/c", scriptPath]);
+            var refusal = CmdRefusal(inputs.Script, scriptsFolder, expandedArguments);
+            if (refusal is not null)
+            {
+                return ActionResult.Failure("script-unsafe-for-cmd", refusal);
+            }
+
+            // cmd re-parses everything after /c. Starting it in the scripts folder and naming the script as .\<name>
+            // keeps the folder path (which may hold spaces or & ^ %) off that line, and because the line after /c
+            // never starts with a quote, cmd's quote stripping never touches the quoted arguments.
+            arguments.AddRange(["/d", "/c", $@".\{inputs.Script}"]);
         }
 
-        arguments.AddRange(inputs.Arguments.Select(Environment.ExpandEnvironmentVariables));
+        arguments.AddRange(expandedArguments);
         var request = new ProcessLaunchRequest(interpreterPath, arguments, scriptsFolder, CaptureOutput: true);
 
         ILaunchedProcess process;
@@ -188,6 +228,23 @@ public sealed partial class ScriptRunAction : WorkflowAction<ScriptRunInputs>
 
             return ActionResult.Failure("exit-code", $"{name} exited with code {exit.ExitCode.ToString(CultureInfo.InvariantCulture)}", output);
         }
+    }
+
+    /// <summary>Run-time re-check for cmd, after <c>%VAR%</c> expansion; <c>null</c> when the script may start.</summary>
+    private static string? CmdRefusal(string script, string scriptsFolder, IReadOnlyList<string> expandedArguments)
+    {
+        if (script.Contains(' ', StringComparison.Ordinal))
+        {
+            return $"Refused: '{script}' contains a space, which the cmd interpreter cannot run safely; rename the file.";
+        }
+
+        if (scriptsFolder.StartsWith(@"\\", StringComparison.Ordinal))
+        {
+            // cmd cannot use a UNC folder as its current directory and would fall back to the Windows folder.
+            return $"Refused: cmd scripts cannot run from a network folder ({scriptsFolder}). Use the powershell interpreter or a local data folder.";
+        }
+
+        return CmdArgumentProblem(expandedArguments);
     }
 
     [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9 ._-]{0,99}$")]

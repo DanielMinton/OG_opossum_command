@@ -76,16 +76,13 @@ public sealed partial class DashboardViewModel : ObservableObject
 
     /// <summary>The run shown in the Active execution panel, or <c>null</c>.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasActiveRun), nameof(CanCancel), nameof(ActiveTitle), nameof(ActiveProgress))]
+    [NotifyPropertyChangedFor(nameof(HasActiveRun), nameof(CanCancel), nameof(ActiveTitle), nameof(ActiveProgress), nameof(ActiveHeadline))]
     [NotifyCanExecuteChangedFor(nameof(CancelCommand))]
     public partial ExecutionSnapshot? ActiveRun { get; set; }
 
     /// <summary>One line of feedback under the tiles (why a tile did nothing, what just finished).</summary>
     [ObservableProperty]
     public partial string StatusMessage { get; set; } = string.Empty;
-
-    [ObservableProperty]
-    public partial string ProfileName { get; set; } = ProfileId.Work.DisplayName();
 
     [ObservableProperty]
     public partial bool HasLoadErrors { get; set; }
@@ -101,11 +98,13 @@ public sealed partial class DashboardViewModel : ObservableObject
         ? string.Empty
         : string.Create(CultureInfo.CurrentCulture, $"{StatusText(ActiveRun.Status)} · {ActiveRun.SettledStepCount} of {ActiveRun.Steps.Count} steps");
 
+    /// <summary>Title and progress as one string, so a live-region change is a single announcement.</summary>
+    public string ActiveHeadline => ActiveRun is null ? string.Empty : $"{ActiveTitle}  ▸  {ActiveProgress}";
+
     /// <summary>Binds the dashboard to <paramref name="profile"/>: tiles, errors, recent runs, active run.</summary>
     public void Load(ProfileId profile)
     {
         _profile = profile;
-        ProfileName = profile.DisplayName();
 
         var loaded = _host.GetWorkflows(profile);
         Tiles.Clear();
@@ -210,8 +209,16 @@ public sealed partial class DashboardViewModel : ObservableObject
             return;
         }
 
-        _host.Launchers.Urls.Open(item.Link);
-        StatusMessage = $"Opened {item.Subject}.";
+        try
+        {
+            _host.Launchers.Urls.Open(item.Link);
+            StatusMessage = $"Opened {item.Subject}.";
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or ArgumentException)
+        {
+            // No browser registered for https, or the shell refused: say so instead of taking the tray app down.
+            StatusMessage = $"Could not open the link for {item.Subject}: {ex.Message}";
+        }
     }
 
     private void OnCalendarChanged(object? sender, CalendarReadResult result)
@@ -440,7 +447,9 @@ public sealed record WorkflowTile(string WorkflowId, string Name, string Descrip
     public bool IsEnabled => !IsPlaceholder;
 
     /// <summary>Screen-reader name.</summary>
-    public string AutomationName => IsPlaceholder ? Name : $"Run {Name}";
+    public string AutomationName => IsPlaceholder ? $"{Name}. {Description}" : $"Run {Name}";
+
+    public override string ToString() => AutomationName;
 
     public static WorkflowTile For(WorkflowDefinition workflow)
     {
@@ -464,6 +473,8 @@ public sealed record TodayEvent(string Time, string Subject, string Detail, Uri?
     /// <summary>Screen-reader name.</summary>
     public string AutomationName => $"{Time}, {Subject}{(IsNow ? ", in progress" : string.Empty)}{(Detail.Length > 0 ? $", {Detail}" : string.Empty)}";
 
+    public override string ToString() => AutomationName;
+
     public static TodayEvent From(CalendarEvent item, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(item);
@@ -483,6 +494,8 @@ public sealed record AttentionItem(Guid Id, string WorkflowName, string Profile,
     /// <summary>Screen-reader name.</summary>
     public string AutomationName => $"{WorkflowName} ({Profile}) needs attention: {Explanation}";
 
+    public override string ToString() => AutomationName;
+
     public static AttentionItem From(ExecutionSnapshot execution)
     {
         ArgumentNullException.ThrowIfNull(execution);
@@ -494,6 +507,11 @@ public sealed record AttentionItem(Guid Id, string WorkflowName, string Profile,
 /// <summary>One line in the Active execution panel.</summary>
 public sealed record StepRow(string Glyph, string Text, string Status)
 {
+    /// <summary>Screen-reader name: the step text and its status.</summary>
+    public string AutomationName => $"{Text}, {Status}";
+
+    public override string ToString() => AutomationName;
+
     public static StepRow From(StepSnapshot step)
     {
         ArgumentNullException.ThrowIfNull(step);
@@ -518,6 +536,11 @@ public sealed record StepRow(string Glyph, string Text, string Status)
 /// <summary>One line in Recent runs / History.</summary>
 public sealed record RunSummary(Guid Id, string WorkflowName, string Status, string When, string Summary)
 {
+    /// <summary>Screen-reader name.</summary>
+    public string AutomationName => $"{WorkflowName}, {Status}, {When}, {Summary}";
+
+    public override string ToString() => AutomationName;
+
     public static RunSummary From(ExecutionSnapshot execution)
     {
         ArgumentNullException.ThrowIfNull(execution);

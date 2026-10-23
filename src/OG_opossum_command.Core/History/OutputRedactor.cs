@@ -30,9 +30,13 @@ public static partial class OutputRedactor
             return text;
         }
 
-        var scrubbed = BearerToken().Replace(text, "Bearer " + Placeholder);
+        var scrubbed = AuthorizationHeader().Replace(text, "$1" + Placeholder);
+        scrubbed = BearerToken().Replace(scrubbed, "Bearer " + Placeholder);
         scrubbed = KeyValueSecret().Replace(scrubbed, "$1=" + Placeholder);
+        scrubbed = CommandLineSecret().Replace(scrubbed, "$1 " + Placeholder);
         scrubbed = QuerySecret().Replace(scrubbed, "$1" + Placeholder);
+        scrubbed = UrlUserInfo().Replace(scrubbed, Placeholder);
+        scrubbed = PrefixedToken().Replace(scrubbed, Placeholder);
         scrubbed = JsonWebToken().Replace(scrubbed, Placeholder);
         scrubbed = AzureStyleKey().Replace(scrubbed, Placeholder);
 
@@ -45,12 +49,29 @@ public static partial class OutputRedactor
         return scrubbed;
     }
 
+    // Authorization: Basic|Digest|NTLM|Negotiate|Bearer <credential>. Anchored to the header so "Basic setup" stays readable.
+    [GeneratedRegex(@"(?i)\b(authorization\s*[:=]\s*)(?:Basic|Digest|NTLM|Negotiate|Bearer)\s+[^\s""',;]+")]
+    private static partial Regex AuthorizationHeader();
+
     [GeneratedRegex(@"\bBearer\s+[A-Za-z0-9\-._~+/]+=*", RegexOptions.IgnoreCase)]
     private static partial Regex BearerToken();
 
-    // password=..., "client_secret": "...", api-key: ..., Authorization: ...
-    [GeneratedRegex(@"(?i)\b(password|passwd|pwd|secret|client[_-]?secret|token|access[_-]?token|refresh[_-]?token|api[_-]?key|apikey|authorization|sas|sig|signature)\b[""']?\s*[:=]\s*[""']?[^\s""'&;,]+", RegexOptions.None)]
+    // password=..., DB_PASSWORD=..., GITHUB_TOKEN=..., "client_secret": "...", "password": "with spaces", SharedAccessKey=...;
+    // The look-behind (not \b) lets the keyword follow '_' so environment dumps from `set` are covered.
+    [GeneratedRegex(@"(?i)(?<![A-Za-z0-9])(password|passwd|pwd|secret|client[_-]?secret|token|access[_-]?token|refresh[_-]?token|api[_-]?key|apikey|authorization|sas|sig|signature|accountkey|sharedaccesskey|connectionstring)\b[""']?\s*[:=]\s*(?:""[^""]*""|'[^']*'|[^\s""'&;,]+)", RegexOptions.None)]
     private static partial Regex KeyValueSecret();
+
+    // --token abc, -password abc, --api-key=abc (a following --flag is left alone).
+    [GeneratedRegex(@"(?i)(?<![\w-])(--?(?:password|passwd|token|secret|client-secret|api-?key))(?:=|\s+)(?!-)[^\s""']+")]
+    private static partial Regex CommandLineSecret();
+
+    // https://user:pass@host (git remotes, connection URLs).
+    [GeneratedRegex(@"(?<=://)[^/\s:@]+:[^/\s@]+(?=@)")]
+    private static partial Regex UrlUserInfo();
+
+    // Tokens recognisable by their prefix: AWS access key IDs, GitHub, GitLab, Slack, OpenAI-style keys.
+    [GeneratedRegex(@"\b(?:AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_\w{20,}|glpat-[\w-]{20,}|xox[abprs]-[A-Za-z0-9-]{10,}|sk-[A-Za-z0-9_-]{20,})")]
+    private static partial Regex PrefixedToken();
 
     // ?token=..., &sig=..., &code=... in URLs
     [GeneratedRegex(@"(?i)([?&](?:token|access_token|id_token|code|sig|signature|key|api[_-]?key|sas)=)[^&\s]+")]

@@ -1,6 +1,7 @@
 <UserControl x:Class="OG_opossum_command.Desktop.Dashboard.DashboardView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:a11y="clr-namespace:OG_opossum_command.Desktop.Accessibility"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:local="clr-namespace:OG_opossum_command.Desktop.Dashboard"
@@ -8,10 +9,9 @@
              d:DataContext="{d:DesignInstance Type=local:DashboardViewModel}"
              Focusable="False"
              AutomationProperties.Name="Dashboard">
-    <UserControl.Resources>
-        <BooleanToVisibilityConverter x:Key="BoolToVis" />
-    </UserControl.Resources>
 
+    <!-- Scrolls so that no panel (and never Cancel) is clipped at large text sizes. -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -21,7 +21,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <!-- Six tiles, stable positions (spec §14) -->
@@ -42,6 +42,7 @@
                             CommandParameter="{Binding}"
                             IsEnabled="{Binding IsEnabled}"
                             ToolTip="{Binding Description}"
+                            ToolTipService.ShowOnDisabled="True"
                             AutomationProperties.Name="{Binding AutomationName}"
                             AutomationProperties.HelpText="{Binding Description}">
                         <TextBlock Text="{Binding Name}" TextWrapping="Wrap" TextAlignment="Center" />
@@ -50,22 +51,60 @@
             </ItemsControl.ItemTemplate>
         </ItemsControl>
 
+        <!-- Active execution -->
+        <Border Grid.Row="1"
+                Margin="6,8,6,0"
+                Padding="10"
+                BorderThickness="2"
+                BorderBrush="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}"
+                Visibility="{Binding HasActiveRun, Converter={StaticResource BoolToVis}}"
+                AutomationProperties.Name="Active execution">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                    <TextBlock Style="{StaticResource OgocHeading}" Text="ACTIVE EXECUTION" />
+                    <TextBlock Text="{Binding ActiveHeadline}" TextWrapping="Wrap" FontSize="{DynamicResource OgocLargeSize}" FontWeight="SemiBold" a11y:LiveRegion.Announce="True" />
+                    <ItemsControl ItemsSource="{Binding ActiveSteps}" Margin="0,6,0,0" Focusable="False">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type local:StepRow}">
+                                <TextBlock Margin="4,1" TextWrapping="Wrap" AutomationProperties.Name="{Binding AutomationName}">
+                                    <Run Text="{Binding Glyph, Mode=OneWay}" FontWeight="Bold" />
+                                    <Run Text=" " />
+                                    <Run Text="{Binding Text, Mode=OneWay}" />
+                                </TextBlock>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+                <Button Grid.Column="1"
+                        Content="_Cancel"
+                        Style="{StaticResource OgocCancel}"
+                        Command="{Binding CancelCommand}"
+                        VerticalAlignment="Top"
+                        Margin="12,0,0,0"
+                        AutomationProperties.Name="Cancel the active run" />
+            </Grid>
+        </Border>
+
         <!-- Feedback line -->
-        <TextBlock Grid.Row="1"
+        <TextBlock Grid.Row="2"
                    Margin="6,4,6,0"
                    Text="{Binding StatusMessage}"
                    TextWrapping="Wrap"
-                   AutomationProperties.LiveSetting="Polite" />
+                   a11y:LiveRegion.Announce="True" />
 
         <!-- Next schedule occurrence (spec §08) -->
-        <TextBlock Grid.Row="2"
+        <TextBlock Grid.Row="3"
                    Margin="6,2,6,0"
                    Text="{Binding NextScheduled}"
                    TextWrapping="Wrap"
                    Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
 
         <!-- Today: remaining events from the profile's calendar file (ADR-011, ADR-039) -->
-        <Border Grid.Row="3"
+        <Border Grid.Row="4"
                 Margin="6,6,6,0"
                 Padding="8"
                 BorderThickness="1"
@@ -85,28 +124,29 @@
                         <TextBlock Style="{StaticResource OgocHeading}" Margin="0" Text="TODAY" />
                         <TextBlock Text="{Binding TodayStatus}"
                                    TextWrapping="Wrap"
-                                   FontSize="12"
+                                   FontSize="{DynamicResource OgocSmallSize}"
                                    Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
-                                   AutomationProperties.LiveSetting="Polite" />
+                                   a11y:LiveRegion.Announce="True" />
                     </StackPanel>
                 </DockPanel>
                 <ItemsControl ItemsSource="{Binding Today}"
+                              Grid.IsSharedSizeScope="True"
                               Margin="0,4,0,0"
                               Focusable="False"
                               KeyboardNavigation.TabNavigation="Continue"
                               Visibility="{Binding HasTodayEvents, Converter={StaticResource BoolToVis}}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="{x:Type local:TodayEvent}">
-                            <Grid Margin="0,1" AutomationProperties.Name="{Binding AutomationName}">
+                            <Grid Margin="0,1">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="100" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="TodayTime" />
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{Binding Time}" FontFamily="Consolas" VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                                <TextBlock Grid.Column="0" Text="{Binding Time}" FontFamily="Consolas" VerticalAlignment="Center" Margin="0,0,12,0" />
+                                <TextBlock Grid.Column="1" VerticalAlignment="Center" TextWrapping="Wrap">
                                     <Run Text="{Binding Subject, Mode=OneWay}" />
-                                    <Run Text="{Binding Detail, Mode=OneWay}" FontSize="12" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                                    <Run Text="{Binding Detail, Mode=OneWay}" FontSize="{DynamicResource OgocSmallSize}" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
                                 </TextBlock>
                                 <Button Grid.Column="2"
                                         Content="Open"
@@ -126,7 +166,7 @@
         </Border>
 
         <!-- Interrupted runs waiting for the operator (spec §13 Needs attention) -->
-        <Border Grid.Row="4"
+        <Border Grid.Row="5"
                 Margin="6,6,6,0"
                 Padding="8"
                 BorderThickness="2"
@@ -138,7 +178,7 @@
                 <ItemsControl ItemsSource="{Binding Attention}" Focusable="False" KeyboardNavigation.TabNavigation="Continue">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="{x:Type local:AttentionItem}">
-                            <Grid Margin="0,2" AutomationProperties.Name="{Binding AutomationName}">
+                            <Grid Margin="0,2">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
@@ -152,25 +192,25 @@
                                         <Run Text=" · " />
                                         <Run Text="{Binding When, Mode=OneWay}" />
                                     </TextBlock>
-                                    <TextBlock Text="{Binding Explanation}" TextWrapping="Wrap" FontSize="12" />
+                                    <TextBlock Text="{Binding Explanation}" TextWrapping="Wrap" FontSize="{DynamicResource OgocSmallSize}" />
                                 </StackPanel>
                                 <Button Grid.Column="1"
-                                        Content="_Resume"
+                                        Content="Resume"
                                         Style="{StaticResource OgocButton}"
                                         Margin="8,0,0,0"
                                         VerticalAlignment="Center"
                                         Command="{Binding DataContext.ResumeCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                         CommandParameter="{Binding}"
-                                        AutomationProperties.Name="Resume this run"
+                                        AutomationProperties.Name="{Binding WorkflowName, StringFormat=Resume {0}}"
                                         AutomationProperties.HelpText="Starts a new run; steps that already completed are not repeated" />
                                 <Button Grid.Column="2"
-                                        Content="_Dismiss"
+                                        Content="Dismiss"
                                         Style="{StaticResource OgocButton}"
                                         Margin="8,0,0,0"
                                         VerticalAlignment="Center"
                                         Command="{Binding DataContext.DismissCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                         CommandParameter="{Binding}"
-                                        AutomationProperties.Name="Dismiss this run"
+                                        AutomationProperties.Name="{Binding WorkflowName, StringFormat=Dismiss {0}}"
                                         AutomationProperties.HelpText="Leaves things as they are; nothing is re-run" />
                             </Grid>
                         </DataTemplate>
@@ -180,7 +220,7 @@
         </Border>
 
         <!-- Workflow files that did not validate -->
-        <Border Grid.Row="5"
+        <Border Grid.Row="6"
                 Margin="6,6,6,0"
                 Padding="8"
                 BorderThickness="1"
@@ -191,59 +231,19 @@
                 <ItemsControl ItemsSource="{Binding LoadErrors}" Focusable="False">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <TextBlock Text="{Binding}" TextWrapping="Wrap" FontFamily="Consolas" FontSize="12" />
+                            <TextBlock Text="{Binding}" TextWrapping="Wrap" FontFamily="Consolas" FontSize="{DynamicResource OgocSmallSize}" />
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </StackPanel>
         </Border>
 
-        <!-- Active execution -->
-        <Border Grid.Row="6"
-                Margin="6,8,6,0"
-                Padding="10"
-                BorderThickness="2"
-                BorderBrush="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}"
-                Visibility="{Binding HasActiveRun, Converter={StaticResource BoolToVis}}"
-                AutomationProperties.Name="Active execution">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0">
-                    <TextBlock Style="{StaticResource OgocHeading}" Text="ACTIVE EXECUTION" />
-                    <TextBlock FontSize="16" FontWeight="SemiBold" AutomationProperties.LiveSetting="Polite">
-                        <Run Text="{Binding ActiveTitle, Mode=OneWay}" />
-                        <Run Text="  ▸  " />
-                        <Run Text="{Binding ActiveProgress, Mode=OneWay}" />
-                    </TextBlock>
-                    <ItemsControl ItemsSource="{Binding ActiveSteps}" Margin="0,6,0,0" Focusable="False">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate DataType="{x:Type local:StepRow}">
-                                <TextBlock Margin="4,1" AutomationProperties.Name="{Binding Status}">
-                                    <Run Text="{Binding Glyph, Mode=OneWay}" FontWeight="Bold" />
-                                    <Run Text=" " />
-                                    <Run Text="{Binding Text, Mode=OneWay}" />
-                                </TextBlock>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-                <Button Grid.Column="1"
-                        Content="_Cancel"
-                        Style="{StaticResource OgocCancel}"
-                        Command="{Binding CancelCommand}"
-                        VerticalAlignment="Top"
-                        Margin="12,0,0,0"
-                        AutomationProperties.Name="Cancel the active run" />
-            </Grid>
-        </Border>
-
         <!-- Recent runs -->
         <DockPanel Grid.Row="7" Margin="6,10,6,0">
             <TextBlock DockPanel.Dock="Top" Style="{StaticResource OgocHeading}" Text="RECENT RUNS" />
             <ListView ItemsSource="{Binding RecentRuns}"
+                      MinHeight="120"
+                      MaxHeight="260"
                       Style="{StaticResource OgocList}"
                       AutomationProperties.Name="Recent runs"
                       SelectionMode="Single">
@@ -258,4 +258,5 @@
             </ListView>
         </DockPanel>
     </Grid>
+    </ScrollViewer>
 </UserControl>

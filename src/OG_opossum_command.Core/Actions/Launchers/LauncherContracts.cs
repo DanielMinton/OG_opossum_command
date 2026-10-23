@@ -57,23 +57,9 @@ public interface IDashboardPresenter
     void ShowSchedule(ProfileId profile);
 }
 
-/// <summary>A presenter that does nothing, for hosts without a dashboard (plain unit tests).</summary>
-public sealed class NoOpDashboardPresenter : IDashboardPresenter
-{
-    public static NoOpDashboardPresenter Instance { get; } = new();
-
-    public void ShowSchedule(ProfileId profile)
-    {
-    }
-}
-
 /// <summary>The launchers an action registry is wired to: every side effect an action can have goes through one of these.</summary>
-/// <param name="Dashboard">Optional; <c>null</c> means <see cref="NoOpDashboardPresenter"/>.</param>
-public sealed record LauncherSet(IProcessLauncher Processes, IUrlOpener Urls, IFolderOpener Folders, IDashboardPresenter? Dashboard = null)
+public sealed record LauncherSet(IProcessLauncher Processes, IUrlOpener Urls, IFolderOpener Folders, IDashboardPresenter Dashboard)
 {
-    /// <summary>The presenter to use: the configured one, or a no-op.</summary>
-    public IDashboardPresenter DashboardOrNoOp => Dashboard ?? NoOpDashboardPresenter.Instance;
-
     /// <summary>Real Windows launchers plus the app's own dashboard presenter: used only by the interactive app.</summary>
     public static LauncherSet Windows(IDashboardPresenter dashboard)
     {

@@ -58,7 +58,7 @@ public sealed class ScriptRunActionTests : IDisposable
 
     [Theory]
     [InlineData("""{ "interpreter": "cmd", "script": "hello.cmd" }""")]
-    [InlineData("""{ "interpreter": "cmd", "script": "Hello World.bat", "arguments": ["a", "b c"] }""")]
+    [InlineData("""{ "interpreter": "cmd", "script": "Hello_World.bat", "arguments": ["a", "b c"] }""")]
     [InlineData("""{ "interpreter": "powershell", "script": "report.ps1" }""")]
     public void Accepts_a_bare_script_name_with_the_matching_extension(string inputs)
     {
@@ -89,7 +89,7 @@ public sealed class ScriptRunActionTests : IDisposable
     public async Task Runs_a_real_cmd_script_from_the_profile_scripts_folder_and_captures_its_output()
     {
         _root.WriteScript(ProfileId.Personal, "hello.cmd", "@echo off\r\necho hello %1 %2\r\necho oops 1>&2\r\nexit /b 0\r\n");
-        var real = ActionRegistry.CreateDefault(new LauncherSet(new WindowsProcessLauncher(), _launchers.Urls, _launchers.Folders));
+        var real = ActionRegistry.CreateDefault(new LauncherSet(new WindowsProcessLauncher(), _launchers.Urls, _launchers.Folders, _launchers.Dashboard));
 
         var result = await RunAsync(real, """{ "interpreter": "cmd", "script": "hello.cmd", "arguments": ["first", "second"] }""");
 
@@ -105,7 +105,7 @@ public sealed class ScriptRunActionTests : IDisposable
     public async Task A_real_cmd_script_that_exits_non_zero_fails_the_step_with_exit_code()
     {
         _root.WriteScript(ProfileId.Personal, "fail.cmd", "@exit /b 4\r\n");
-        var real = ActionRegistry.CreateDefault(new LauncherSet(new WindowsProcessLauncher(), _launchers.Urls, _launchers.Folders));
+        var real = ActionRegistry.CreateDefault(new LauncherSet(new WindowsProcessLauncher(), _launchers.Urls, _launchers.Folders, _launchers.Dashboard));
 
         var result = await RunAsync(real, """{ "interpreter": "cmd", "script": "fail.cmd" }""");
 

@@ -13,6 +13,9 @@ namespace OG_opossum_command.Core.Engine;
 /// </summary>
 public sealed class WorkflowEngine : IDisposable
 {
+    /// <summary>Cap on a stored or published step message or run error (after redaction).</summary>
+    public const int MaxMessageChars = 500;
+
     private readonly ActionRegistry _registry;
     private readonly IHistoryStore _history;
     private readonly TimeProvider _time;
@@ -20,6 +23,7 @@ public sealed class WorkflowEngine : IDisposable
     private readonly Dictionary<Guid, Run> _runs = [];
     private readonly Lock _gate = new();
     private bool _disposed;
+    private bool _stopping;
 
     public WorkflowEngine(ActionRegistry registry, IHistoryStore history, EngineOptions? options = null, TimeProvider? time = null)
     {
@@ -72,6 +76,7 @@ public sealed class WorkflowEngine : IDisposable
     /// existing run when one for the same workflow is still active (focus-existing).
     /// </summary>
     /// <exception cref="ActionNotAllowedException">A step's action is not allowed in <paramref name="profile"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The engine is disposed or <see cref="ShutdownAsync"/> has begun.</exception>
     public StartResult Start(WorkflowDefinition workflow, Profile profile, StartOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(workflow);
@@ -100,6 +105,8 @@ public sealed class WorkflowEngine : IDisposable
         Run run;
         lock (_gate)
         {
+            // Once shutdown begins nothing new may start, or it would outlive the grace period (a schedule firing during Quit).
+            ObjectDisposedException.ThrowIf(_stopping, this);
             var existing = _runs.Values.FirstOrDefault(r => r.Workflow.Id == workflow.Id && r.Profile.Id == profile.Id && r.Snapshot().IsActive);
             if (existing is not null)
             {
@@ -110,15 +117,30 @@ public sealed class WorkflowEngine : IDisposable
             _runs[run.Id] = run;
         }
 
-        var snapshot = run.Snapshot();
-        _history.SaveExecution(snapshot);
-        AppendEvent(run, null, EventSeverity.Info, "execution.queued", options.TriggerSource switch
+        ExecutionSnapshot snapshot;
+        try
         {
-            TriggerSources.Schedule => $"Queued {workflow.Name} (scheduled for {options.ScheduledFor:u})",
-            TriggerSources.Recovery => $"Queued {workflow.Name} (resuming run {options.ResumedFrom}; {options.AlreadyCompletedSteps?.Count ?? 0} step(s) already done)",
-            _ => $"Queued {workflow.Name}",
-        }, null);
-        ExecutionChanged?.Invoke(this, snapshot);
+            snapshot = Persist(run);
+            AppendEvent(run, null, EventSeverity.Info, "execution.queued", options.TriggerSource switch
+            {
+                TriggerSources.Schedule => $"Queued {workflow.Name} (scheduled for {options.ScheduledFor:u})",
+                TriggerSources.Recovery => $"Queued {workflow.Name} (resuming run {options.ResumedFrom}; {options.AlreadyCompletedSteps?.Count ?? 0} step(s) already done)",
+                _ => $"Queued {workflow.Name}",
+            }, null);
+            ExecutionChanged?.Invoke(this, snapshot);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Never leave a phantom Queued run behind: it would block this workflow (focus-existing) for the rest of the process.
+            lock (_gate)
+            {
+                _runs.Remove(run.Id);
+            }
+
+            run.Completion.TrySetCanceled();
+            run.Cancellation.Dispose();
+            throw;
+        }
 
         _ = Task.Run(() => RunAsync(run));
         return new StartResult(snapshot, WasAlreadyRunning: false);
@@ -149,6 +171,16 @@ public sealed class WorkflowEngine : IDisposable
 
         if (changed)
         {
+            // Persisted before anyone hears of it, so a run the operator stopped is never mistaken for one the app lost (ADR-024).
+            try
+            {
+                Persist(run);
+            }
+            catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException or IOException or Microsoft.Data.Sqlite.SqliteException)
+            {
+                // The store is gone (shutdown): cancelling must still happen; the next start reconciles the row.
+            }
+
             Publish(run);
             AppendEvent(run, null, EventSeverity.Warning, "execution.cancelling", "Cancel requested", null);
         }
@@ -173,12 +205,13 @@ public sealed class WorkflowEngine : IDisposable
         return run.Snapshot();
     }
 
-    /// <summary>Cancels every active run and waits up to <paramref name="grace"/> for them to settle.</summary>
+    /// <summary>Refuses new runs from now on, cancels every active run, and waits up to <paramref name="grace"/> for them to settle.</summary>
     public async Task ShutdownAsync(TimeSpan grace)
     {
         List<Run> active;
         lock (_gate)
         {
+            _stopping = true;
             active = _runs.Values.Where(r => r.Snapshot().IsActive).ToList();
         }
 
@@ -233,19 +266,16 @@ public sealed class WorkflowEngine : IDisposable
             var now = _time.GetUtcNow();
             run.Update(state =>
             {
-                state.Status = ExecutionStatus.Running;
-                state.StartedAt = now;
-                foreach (var step in state.Steps.Values.Where(s => run.Options.AlreadyCompletedSteps?.Contains(s.Definition.Id) == true))
+                // A Cancel that landed while the slot was being acquired keeps the run Cancelling.
+                if (state.Status == ExecutionStatus.Queued)
                 {
-                    // Its side effect happened in the run being resumed; never repeat it (spec §13).
-                    step.Status = StepStatus.Completed;
-                    step.StartedAt = now;
-                    step.FinishedAt = now;
-                    step.Message = "Completed in the interrupted run; not repeated";
+                    state.Status = ExecutionStatus.Running;
                 }
 
+                state.StartedAt = now;
                 return true;
             });
+            Persist(run);
             Publish(run);
             AppendEvent(run, null, EventSeverity.Info, "execution.started", $"Started {run.Workflow.Name}", null);
 
@@ -260,7 +290,7 @@ public sealed class WorkflowEngine : IDisposable
             // Engine or history failure: record it on the run rather than losing the run silently.
             run.Update(state =>
             {
-                state.Error = $"{ex.GetType().Name}: {ex.Message}";
+                state.Error = OutputRedactor.Redact($"{ex.GetType().Name}: {ex.Message}", MaxMessageChars);
                 return true;
             });
         }
@@ -268,7 +298,14 @@ public sealed class WorkflowEngine : IDisposable
         {
             if (slotAcquired && !_disposed)
             {
-                _workflowSlots.Release();
+                try
+                {
+                    _workflowSlots.Release();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Disposed between the check and the release; Finalize must still run so Completion is set.
+                }
             }
 
             Finalize(run);
@@ -352,13 +389,43 @@ public sealed class WorkflowEngine : IDisposable
             var finished = await Task.WhenAny(running.Values).ConfigureAwait(false);
             var finishedId = running.First(kv => kv.Value == finished).Key;
             running.Remove(finishedId);
-            await finished.ConfigureAwait(false);
+            try
+            {
+                await finished.ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // Bookkeeping failed (e.g. the store): stop the siblings and wait for them, so nothing outlives the run.
+                await StopAndDrainAsync(run, running.Values).ConfigureAwait(false);
+                throw;
+            }
 
             var finishedStep = run.Workflow.FindStep(finishedId)!;
             if (run.StepStatusOf(finishedId) == StepStatus.Failed && finishedStep.OnFailure == OnFailurePolicy.Stop)
             {
                 stopRequested = true;
             }
+        }
+    }
+
+    private static async Task StopAndDrainAsync(Run run, IEnumerable<Task> running)
+    {
+        try
+        {
+            run.Cancellation.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // The engine was disposed; the siblings are already cancelled. Still wait for them below.
+        }
+
+        try
+        {
+            await Task.WhenAll(running).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Secondary to the failure being rethrown; observed here so none goes unobserved.
         }
     }
 
@@ -369,7 +436,7 @@ public sealed class WorkflowEngine : IDisposable
         var startedAt = _time.GetUtcNow();
 
         run.SetStep(step.Id, StepStatus.Running, null, null, step.Locks.Count > 0 ? $"Waiting for {string.Join(", ", step.Locks)}" : null, null, startedAt);
-        _history.SaveExecution(run.Snapshot());
+        Persist(run);
         AppendEvent(run, step.Id, EventSeverity.Info, "step.started", $"{step.Name} ({step.ActionId})", null);
         Publish(run);
 
@@ -396,7 +463,7 @@ public sealed class WorkflowEngine : IDisposable
             var result = await action.ExecuteAsync(step.Inputs, context, stepCancellation.Token).ConfigureAwait(false);
             status = result.Succeeded ? StepStatus.Completed : StepStatus.Failed;
             errorCode = result.ErrorCode;
-            message = result.Message;
+            message = OutputRedactor.Redact(result.Message, MaxMessageChars);
             output = OutputRedactor.Redact(result.Output);
             severity = result.Succeeded ? EventSeverity.Info : EventSeverity.Error;
         }
@@ -417,13 +484,13 @@ public sealed class WorkflowEngine : IDisposable
         {
             status = StepStatus.Failed;
             errorCode = "action-error";
-            message = OutputRedactor.Redact($"{ex.GetType().Name}: {ex.Message}") ?? ex.GetType().Name;
+            message = OutputRedactor.Redact($"{ex.GetType().Name}: {ex.Message}", MaxMessageChars) ?? ex.GetType().Name;
             severity = EventSeverity.Error;
         }
 
         var finishedAt = _time.GetUtcNow();
         run.SetStep(step.Id, status, finishedAt, errorCode, message, output);
-        _history.SaveExecution(run.Snapshot());
+        Persist(run);
         AppendEvent(run, step.Id, severity, $"step.{status.ToString().ToLowerInvariant()}", message ?? status.ToString(), (long)(finishedAt - startedAt).TotalMilliseconds);
         Publish(run);
     }
@@ -439,7 +506,12 @@ public sealed class WorkflowEngine : IDisposable
                 step.FinishedAt = now;
             }
 
-            if (run.Cancellation.IsCancellationRequested)
+            if (state.Error is null && state.Steps.Values.All(s => s.Status == StepStatus.Completed))
+            {
+                // Every side effect happened: a Cancel that arrived after the last step is too late to change that.
+                state.Status = ExecutionStatus.Completed;
+            }
+            else if (run.Cancellation.IsCancellationRequested && state.Error is null)
             {
                 state.Status = ExecutionStatus.Cancelled;
             }
@@ -460,7 +532,7 @@ public sealed class WorkflowEngine : IDisposable
         var snapshot = run.Snapshot();
         try
         {
-            _history.SaveExecution(snapshot);
+            snapshot = Persist(run);
             AppendEvent(
                 run,
                 null,
@@ -482,6 +554,17 @@ public sealed class WorkflowEngine : IDisposable
 
     private void Publish(Run run) => ExecutionChanged?.Invoke(this, run.Snapshot());
 
+    /// <summary>Snapshot and save as one step per run, so an older snapshot can never overwrite a newer one.</summary>
+    private ExecutionSnapshot Persist(Run run)
+    {
+        lock (run.SaveGate)
+        {
+            var snapshot = run.Snapshot();
+            _history.SaveExecution(snapshot);
+            return snapshot;
+        }
+    }
+
     private void AppendEvent(Run run, string? stepId, EventSeverity severity, string eventType, string message, long? durationMs) =>
         _history.AppendEvent(new ExecutionEvent(0, run.Id, run.Workflow.Id, stepId, _time.GetUtcNow(), severity, eventType, OutputRedactor.Redact(message) ?? string.Empty, durationMs));
 
@@ -501,7 +584,18 @@ public sealed class WorkflowEngine : IDisposable
             var ordinal = 0;
             foreach (var step in workflow.Steps)
             {
-                _state.Steps[step.Id] = new StepState(step, ordinal++);
+                var state = new StepState(step, ordinal++);
+                if (options.AlreadyCompletedSteps?.Contains(step.Id) == true)
+                {
+                    // Its side effect happened in the run being resumed; never repeat it (spec §13). Set here so the
+                    // first save records it, and a second crash before this run starts cannot forget it.
+                    state.Status = StepStatus.Completed;
+                    state.StartedAt = queuedAt;
+                    state.FinishedAt = queuedAt;
+                    state.Message = "Completed in the interrupted run; not repeated";
+                }
+
+                _state.Steps[step.Id] = state;
             }
         }
 
@@ -514,6 +608,9 @@ public sealed class WorkflowEngine : IDisposable
         public StartOptions Options { get; }
 
         public CancellationTokenSource Cancellation { get; } = new();
+
+        /// <summary>Serialises snapshot-then-save for this run (see <see cref="Persist"/>).</summary>
+        public Lock SaveGate { get; } = new();
 
         public TaskCompletionSource<ExecutionSnapshot> Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 

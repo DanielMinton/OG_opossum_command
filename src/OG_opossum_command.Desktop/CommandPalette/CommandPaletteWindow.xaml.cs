@@ -1,4 +1,7 @@
+using System.ComponentModel;
 using System.Windows;
+using System.Windows.Automation;
+using System.Windows.Automation.Peers;
 using System.Windows.Input;
 
 namespace OG_opossum_command.Desktop.CommandPalette;
@@ -17,6 +20,7 @@ public partial class CommandPaletteWindow : Window
         InitializeComponent();
         DataContext = viewModel;
         viewModel.Ran += OnRan;
+        viewModel.PropertyChanged += OnViewModelChanged;
         Loaded += (_, _) => QueryBox.Focus();
         Deactivated += (_, _) =>
         {
@@ -25,7 +29,11 @@ public partial class CommandPaletteWindow : Window
                 Close();
             }
         };
-        Closed += (_, _) => viewModel.Ran -= OnRan;
+        Closed += (_, _) =>
+        {
+            viewModel.Ran -= OnRan;
+            viewModel.PropertyChanged -= OnViewModelChanged;
+        };
     }
 
     /// <summary>Set by the smoke runner, which shows the window off-screen without activating it.</summary>
@@ -55,6 +63,22 @@ public partial class CommandPaletteWindow : Window
         }
 
         base.OnPreviewKeyDown(e);
+    }
+
+    /// <summary>Focus stays in the search box, so keep the selected row visible and tell screen readers which one Enter will run.</summary>
+    private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(CommandPaletteViewModel.Selected) || _viewModel.Selected is not { } item)
+        {
+            return;
+        }
+
+        Results.ScrollIntoView(item);
+        UIElementAutomationPeer.FromElement(QueryBox)?.RaiseNotificationEvent(
+            AutomationNotificationKind.Other,
+            AutomationNotificationProcessing.MostRecent,
+            item.AutomationName,
+            "palette-selection");
     }
 
     private void OnRan(string message)

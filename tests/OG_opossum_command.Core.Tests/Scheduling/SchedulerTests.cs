@@ -53,7 +53,7 @@ public sealed class SchedulerTests : IDisposable
         """;
 
     private const string UrlStep = """{ "id": "open", "action": "windows.url.open", "inputs": { "url": "https://example.com/" } }""";
-    private const string ProcessStep = """{ "id": "wait", "action": "windows.process.launch", "inputs": { "path": "%SystemRoot%\\System32\\cmd.exe", "arguments": ["/c", "echo"], "waitForExit": true } }""";
+    private const string ProcessStep = """{ "id": "wait", "action": "windows.process.launch", "inputs": { "path": "%SystemRoot%\\System32\\PING.EXE", "arguments": ["-n", "1", "127.0.0.1"], "waitForExit": true } }""";
 
     private WorkflowDefinition Add(string id, string trigger, string step = UrlStep)
     {

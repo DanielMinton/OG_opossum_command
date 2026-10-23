@@ -16,6 +16,15 @@ public sealed class SqliteHistoryStore : IHistoryStore
     private const string ExecutionColumns = "id, profile_id, workflow_id, workflow_name, status, queued_at, started_at, finished_at, error, workflow_hash, trigger_source, scheduled_for, resumed_from, recovery";
     private const string TriggerColumns = "id, profile_id, workflow_id, type, enabled, config_json, config_hash, next_due_at, last_fired_for, last_fired_at, last_outcome, updated_at";
 
+    /// <summary>
+    /// Backstop cap for run errors and step messages and output redacted on the way in. Above the engine's own caps,
+    /// so text the engine already bounded is scrubbed again but never truncated twice.
+    /// </summary>
+    private const int MaxStoredTextChars = 2 * OutputRedactor.MaxStoredChars;
+
+    /// <summary>The error a run gets when the app stopped while the operator was cancelling it (it ends Cancelled, not Interrupted).</summary>
+    public const string CancelledBeforeStopError = "Cancelled; the app stopped before the run finished cancelling.";
+
     private readonly SqliteConnection _connection;
     private readonly Lock _gate = new();
     private bool _disposed;
@@ -139,7 +148,7 @@ public sealed class SqliteHistoryStore : IHistoryStore
                 command.Parameters.AddWithValue("$queued", Format(execution.QueuedAt));
                 command.Parameters.AddWithValue("$started", (object?)Format(execution.StartedAt) ?? DBNull.Value);
                 command.Parameters.AddWithValue("$finished", (object?)Format(execution.FinishedAt) ?? DBNull.Value);
-                command.Parameters.AddWithValue("$error", (object?)execution.Error ?? DBNull.Value);
+                command.Parameters.AddWithValue("$error", (object?)Scrub(execution.Error) ?? DBNull.Value);
                 command.Parameters.AddWithValue("$hash", execution.WorkflowHash);
                 command.Parameters.AddWithValue("$source", execution.TriggerSource);
                 command.Parameters.AddWithValue("$scheduled", (object?)Format(execution.ScheduledFor) ?? DBNull.Value);
@@ -168,8 +177,8 @@ public sealed class SqliteHistoryStore : IHistoryStore
                 command.Parameters.AddWithValue("$started", (object?)Format(step.StartedAt) ?? DBNull.Value);
                 command.Parameters.AddWithValue("$finished", (object?)Format(step.FinishedAt) ?? DBNull.Value);
                 command.Parameters.AddWithValue("$code", (object?)step.ErrorCode ?? DBNull.Value);
-                command.Parameters.AddWithValue("$message", (object?)step.Message ?? DBNull.Value);
-                command.Parameters.AddWithValue("$output", (object?)step.Output ?? DBNull.Value);
+                command.Parameters.AddWithValue("$message", (object?)Scrub(step.Message) ?? DBNull.Value);
+                command.Parameters.AddWithValue("$output", (object?)Scrub(step.Output) ?? DBNull.Value);
                 command.ExecuteNonQuery();
             }
 
@@ -208,15 +217,22 @@ public sealed class SqliteHistoryStore : IHistoryStore
             var stamp = Format(now);
 
             var ids = new List<(string Id, string WorkflowId)>();
+            var cancelling = new List<(string Id, string WorkflowId)>();
             using (var select = _connection.CreateCommand())
             {
                 select.Transaction = transaction;
-                select.CommandText = "SELECT id, workflow_id FROM executions WHERE status IN ('Queued', 'Running', 'Cancelling') ORDER BY queued_at, rowid;";
+                select.CommandText = "SELECT id, workflow_id, status FROM executions WHERE status IN ('Queued', 'Running', 'Cancelling') ORDER BY queued_at, rowid;";
                 using var reader = select.ExecuteReader();
                 while (reader.Read())
                 {
-                    ids.Add((reader.GetString(0), reader.GetString(1)));
+                    var row = (reader.GetString(0), reader.GetString(1));
+                    (reader.GetString(2) == nameof(ExecutionStatus.Cancelling) ? cancelling : ids).Add(row);
                 }
+            }
+
+            foreach (var (id, workflowId) in cancelling)
+            {
+                FinishCancelled(transaction, id, workflowId, stamp);
             }
 
             foreach (var (id, workflowId) in ids)
@@ -259,6 +275,62 @@ public sealed class SqliteHistoryStore : IHistoryStore
         }
     }
 
+    /// <summary>
+    /// A run the operator was cancelling (Cancel or Quit) when the app stopped ends Cancelled, not Interrupted, so
+    /// recovery never restarts work the operator explicitly stopped (ADR-004).
+    /// </summary>
+    private void FinishCancelled(SqliteTransaction transaction, string id, string workflowId, string stamp)
+    {
+        using (var steps = _connection.CreateCommand())
+        {
+            steps.Transaction = transaction;
+            steps.CommandText = "UPDATE step_executions SET status = 'Cancelled', finished_at = $now WHERE execution_id = $id AND status IN ('Pending', 'Running');";
+            steps.Parameters.AddWithValue("$now", stamp);
+            steps.Parameters.AddWithValue("$id", id);
+            steps.ExecuteNonQuery();
+        }
+
+        using (var execution = _connection.CreateCommand())
+        {
+            execution.Transaction = transaction;
+            execution.CommandText = "UPDATE executions SET status = 'Cancelled', finished_at = $now, recovery = NULL, error = $error WHERE id = $id;";
+            execution.Parameters.AddWithValue("$now", stamp);
+            execution.Parameters.AddWithValue("$id", id);
+            execution.Parameters.AddWithValue("$error", CancelledBeforeStopError);
+            execution.ExecuteNonQuery();
+        }
+
+        using var evt = _connection.CreateCommand();
+        evt.Transaction = transaction;
+        evt.CommandText = """
+            INSERT INTO execution_events (execution_id, workflow_id, step_id, at_utc, severity, event_type, message, duration_ms)
+            VALUES ($id, $workflow, NULL, $now, 'Warning', 'execution.cancelled', $message, NULL);
+            """;
+        evt.Parameters.AddWithValue("$id", id);
+        evt.Parameters.AddWithValue("$workflow", workflowId);
+        evt.Parameters.AddWithValue("$now", stamp);
+        evt.Parameters.AddWithValue("$message", "Marked Cancelled at startup: " + CancelledBeforeStopError);
+        evt.ExecuteNonQuery();
+    }
+
+    public IReadOnlyList<Guid> GetPendingRecovery()
+    {
+        lock (_gate)
+        {
+            using var command = _connection.CreateCommand();
+            command.CommandText = "SELECT id FROM executions WHERE status = 'Interrupted' AND recovery = $pending ORDER BY queued_at, rowid;";
+            command.Parameters.AddWithValue("$pending", RecoveryStates.Pending);
+            using var reader = command.ExecuteReader();
+            var ids = new List<Guid>();
+            while (reader.Read())
+            {
+                ids.Add(Guid.Parse(reader.GetString(0)));
+            }
+
+            return ids;
+        }
+    }
+
     public void SetRecovery(Guid executionId, ExecutionStatus status, string recovery, string explanation, DateTimeOffset now)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(recovery);
@@ -274,7 +346,7 @@ public sealed class SqliteHistoryStore : IHistoryStore
                 update.CommandText = "UPDATE executions SET status = $status, recovery = $recovery, error = $error WHERE id = $id RETURNING workflow_id;";
                 update.Parameters.AddWithValue("$status", status.ToString());
                 update.Parameters.AddWithValue("$recovery", recovery);
-                update.Parameters.AddWithValue("$error", explanation);
+                update.Parameters.AddWithValue("$error", Scrub(explanation));
                 update.Parameters.AddWithValue("$id", executionId.ToString("D"));
                 workflowId = update.ExecuteScalar() as string ?? throw new KeyNotFoundException($"Unknown execution {executionId}.");
             }
@@ -457,6 +529,23 @@ public sealed class SqliteHistoryStore : IHistoryStore
         }
     }
 
+    public void UpdateTriggerOutcome(string triggerId, DateTimeOffset? lastFiredAt, string outcome, DateTimeOffset updatedAt)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(triggerId);
+        ArgumentNullException.ThrowIfNull(outcome);
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            using var command = _connection.CreateCommand();
+            command.CommandText = "UPDATE triggers SET last_fired_at = COALESCE($firedAt, last_fired_at), last_outcome = $outcome, updated_at = $updated WHERE id = $id;";
+            command.Parameters.AddWithValue("$id", triggerId);
+            command.Parameters.AddWithValue("$firedAt", (object?)Format(lastFiredAt) ?? DBNull.Value);
+            command.Parameters.AddWithValue("$outcome", outcome);
+            command.Parameters.AddWithValue("$updated", Format(updatedAt));
+            command.ExecuteNonQuery();
+        }
+    }
+
     public void DeleteTrigger(string triggerId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(triggerId);
@@ -534,6 +623,9 @@ public sealed class SqliteHistoryStore : IHistoryStore
     }
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
+
+    /// <summary>Redacts every free-text column centrally, so no caller can forget (spec §13).</summary>
+    private static string? Scrub(string? text) => OutputRedactor.Redact(text, MaxStoredTextChars);
 
     private static int Migrate(SqliteConnection connection)
     {

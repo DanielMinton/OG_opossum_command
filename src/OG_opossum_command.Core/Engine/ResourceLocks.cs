@@ -25,6 +25,12 @@ public sealed class ResourceLocks
             return "A lock must look like '<kind>:<name>', for example 'window:outlook' or 'file:C:\\Notes\\today.txt'.";
         }
 
+        if (value.Contains('\0', StringComparison.Ordinal))
+        {
+            // %VAR% expansion would cut a file path at the NUL and Path.GetFullPath throws on it: refuse it readably.
+            return $"Lock '{value.Replace("\0", "\\u0000", StringComparison.Ordinal)}' contains a NUL character (\\u0000).";
+        }
+
         var colon = value.IndexOf(':', StringComparison.Ordinal);
         if (colon <= 0 || colon == value.Length - 1)
         {

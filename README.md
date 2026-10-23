@@ -11,7 +11,9 @@ is superseded). Decisions: [docs/DECISIONS.md](docs/DECISIONS.md).
 
 ## Status
 
-Phase 5 (calendar without app registration). Workflows are JSON files per profile (schema v1 and
+Version 0.1.0, Phase 6 (hardening) done: see [CHANGELOG.md](CHANGELOG.md) and the acceptance matrix
+in [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md), which also lists the few checks only you can do on
+this PC (keyboard, Narrator, high contrast, text size, offline). Workflows are JSON files per profile (schema v1 and
 v2, see [docs/WORKFLOW-SCHEMA.md](docs/WORKFLOW-SCHEMA.md)); six actions (open a web page, open a
 folder, launch a program with an argument array, run a trusted script from the profile's own
 `scripts` folder, read the calendar file, show today's schedule); an engine with execution IDs, dependencies, bounded parallelism, resource locks, timeouts,
@@ -27,6 +29,9 @@ just brings the existing window forward.
 Scripts: `windows.script.run` only runs files that live in `profiles\<Work|Personal>\scripts`, with
 an explicit interpreter (`powershell` or `cmd`) and an argument array. If PowerShell's execution
 policy on this PC blocks a `.ps1`, the step says so plainly; the app never overrides that policy.
+`cmd` arguments may not contain `& | < > ^ % ! " ( )`, because cmd would interpret them; use
+`powershell` for parameterised scripts. `windows.process.launch` refuses shells and script hosts
+(cmd, powershell, wscript, mshta, ...), so scripts always go through `windows.script.run`.
 
 Calendar: the dashboard's **Today** panel lists the rest of today's work events. They come from a
 JSON file that **your own** Power Automate flow writes to your work OneDrive every 15 minutes (step
@@ -43,7 +48,7 @@ isn't configured or is unavailable. The Personal profile can't read the work cal
 | `tests/OG_opossum_command.Core.Tests` | xUnit tests for Core. |
 | `examples/workflows/{work,personal}` | Example workflow files per profile. None is scheduled. |
 | `examples/scripts/personal` | Example trusted script (`hello.cmd`) seeded into the Personal profile's `scripts` folder. |
-| `docs/` | Architecture, decisions, feasibility report, workflow schema, Power Automate calendar flow (for you to build). |
+| `docs/` | Architecture, decisions, feasibility report, workflow schema, Power Automate calendar flow (for you to build), acceptance matrix. |
 | `tests/fixtures` | Shared test fixtures (`calendar.sample.json`, also the sample in the flow guide). |
 | `spikes/feasibility` | Throwaway Phase 1 spike, not in the solution. |
 

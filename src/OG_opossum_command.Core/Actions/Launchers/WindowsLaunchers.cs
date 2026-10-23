@@ -9,6 +9,12 @@ public sealed class WindowsProcessLauncher : IProcessLauncher
     /// <summary>Per-stream cap on captured output; anything beyond is dropped with a marker.</summary>
     public const int CaptureLimitChars = 8 * 1024;
 
+    /// <summary>How long output may keep draining after the process exits before the wait returns anyway.</summary>
+    public static readonly TimeSpan DrainAfterExit = TimeSpan.FromSeconds(2);
+
+    /// <summary>Stands in for a stream whose pipe a child process still held open when the wait returned.</summary>
+    public const string StillOpenMarker = "[output still open: a child process kept the pipe]";
+
     public ILaunchedProcess Start(ProcessLaunchRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -36,13 +42,15 @@ public sealed class WindowsProcessLauncher : IProcessLauncher
         private readonly Process _process;
         private readonly Task<string> _stdout;
         private readonly Task<string> _stderr;
+        private readonly StringBuilder _stdoutSoFar = new();
+        private readonly StringBuilder _stderrSoFar = new();
 
         public LaunchedProcess(Process process, bool captureOutput)
         {
             _process = process;
             // Drain both pipes from the start so the child can never block on a full pipe.
-            _stdout = captureOutput ? ReadBoundedAsync(process.StandardOutput) : Task.FromResult(string.Empty);
-            _stderr = captureOutput ? ReadBoundedAsync(process.StandardError) : Task.FromResult(string.Empty);
+            _stdout = captureOutput ? Observed(ReadBoundedAsync(process.StandardOutput, _stdoutSoFar)) : Task.FromResult(string.Empty);
+            _stderr = captureOutput ? Observed(ReadBoundedAsync(process.StandardError, _stderrSoFar)) : Task.FromResult(string.Empty);
         }
 
         public int ProcessId => _process.Id;
@@ -52,9 +60,18 @@ public sealed class WindowsProcessLauncher : IProcessLauncher
         public async Task<ProcessExit> WaitForExitAsync(CancellationToken cancellationToken)
         {
             await _process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-            var stdout = await _stdout.ConfigureAwait(false);
-            var stderr = await _stderr.ConfigureAwait(false);
-            return new ProcessExit(_process.ExitCode, stdout, stderr);
+            try
+            {
+                // A grandchild that inherited the pipe (e.g. `start` in a script) keeps it open after the process
+                // exits; EOF may never come, so the drain is bounded and still honours cancellation.
+                await Task.WhenAll(_stdout, _stderr).WaitAsync(DrainAfterExit, cancellationToken).ConfigureAwait(false);
+            }
+            catch (TimeoutException)
+            {
+                // Return what was captured; the marker says why the rest is missing.
+            }
+
+            return new ProcessExit(_process.ExitCode, Captured(_stdout, _stdoutSoFar), Captured(_stderr, _stderrSoFar));
         }
 
         public void KillTree()
@@ -74,40 +91,76 @@ public sealed class WindowsProcessLauncher : IProcessLauncher
             {
                 // Exited between the check and the kill, or access denied to a descendant: nothing more we can do.
             }
+            catch (AggregateException)
+            {
+                // "Not all processes in the process tree could be terminated" (e.g. an elevated descendant). Swallowed
+                // so the caller's cancellation or timeout is still reported as such, not as an action error.
+            }
+            catch (NotSupportedException)
+            {
+                // Not a local process; nothing to kill.
+            }
         }
 
         public void Dispose() => _process.Dispose();
 
-        private static async Task<string> ReadBoundedAsync(StreamReader reader)
+        /// <summary>The text a read task captured, or what it had so far plus a marker when the pipe was still open.</summary>
+        private static string Captured(Task<string> read, StringBuilder soFar)
         {
-            var buffer = new StringBuilder();
+            if (read.IsCompletedSuccessfully)
+            {
+                return read.Result;
+            }
+
+            lock (soFar)
+            {
+                return soFar.Length == 0 ? StillOpenMarker : $"{soFar}{Environment.NewLine}{StillOpenMarker}";
+            }
+        }
+
+        /// <summary>Observes a fault (e.g. the reader disposed under it) so it never surfaces as an unobserved task exception.</summary>
+        private static Task<string> Observed(Task<string> read)
+        {
+            _ = read.ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            return read;
+        }
+
+        /// <summary>Reads to EOF into <paramref name="buffer"/> (locked per append, so a bounded wait can take what arrived so far).</summary>
+        private static async Task<string> ReadBoundedAsync(StreamReader reader, StringBuilder buffer)
+        {
             var chunk = new char[1024];
             var dropped = 0;
             int read;
             while ((read = await reader.ReadAsync(chunk, 0, chunk.Length).ConfigureAwait(false)) > 0)
             {
-                var room = CaptureLimitChars - buffer.Length;
-                if (room >= read)
+                lock (buffer)
                 {
-                    buffer.Append(chunk, 0, read);
-                }
-                else
-                {
-                    if (room > 0)
+                    var room = CaptureLimitChars - buffer.Length;
+                    if (room >= read)
                     {
-                        buffer.Append(chunk, 0, room);
+                        buffer.Append(chunk, 0, read);
                     }
+                    else
+                    {
+                        if (room > 0)
+                        {
+                            buffer.Append(chunk, 0, room);
+                        }
 
-                    dropped += read - Math.Max(room, 0);
+                        dropped += read - Math.Max(room, 0);
+                    }
                 }
             }
 
-            if (dropped > 0)
+            lock (buffer)
             {
-                buffer.Append(System.Globalization.CultureInfo.InvariantCulture, $"{Environment.NewLine}[output truncated: {dropped} more characters]");
-            }
+                if (dropped > 0)
+                {
+                    buffer.Append(System.Globalization.CultureInfo.InvariantCulture, $"{Environment.NewLine}[output truncated: {dropped} more characters]");
+                }
 
-            return buffer.ToString();
+                return buffer.ToString();
+            }
         }
     }
 }

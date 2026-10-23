@@ -64,10 +64,6 @@ public sealed partial class ShellViewModel : ObservableObject
     [ObservableProperty]
     public partial ProfileId ActiveProfile { get; set; }
 
-    public bool IsWorkActive => ActiveProfile == ProfileId.Work;
-
-    public bool IsPersonalActive => ActiveProfile == ProfileId.Personal;
-
     /// <summary>Records the hotkey registration outcome (null when fine) and refreshes the status line.</summary>
     public void ReportHotkey(string? problem, string statusForSettings)
     {
@@ -109,8 +105,6 @@ public sealed partial class ShellViewModel : ObservableObject
         _host.History.SetSetting(SettingKeys.ActiveProfile, value.ToJsonValue());
         Dashboard.Load(value);
         History.Load(value);
-        OnPropertyChanged(nameof(IsWorkActive));
-        OnPropertyChanged(nameof(IsPersonalActive));
     }
 
     [RelayCommand]
@@ -143,9 +137,6 @@ public sealed partial class ShellViewModel : ObservableObject
 
     [RelayCommand]
     private void Hide() => _app.MainWindow?.Hide();
-
-    [RelayCommand]
-    private void Open() => _app.ShowDashboard();
 
     [RelayCommand]
     private void Quit() => _app.Quit();

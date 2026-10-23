@@ -18,7 +18,6 @@ public sealed class SingleInstanceLock : IDisposable
 
     private SingleInstanceLock(string name, Mutex? mutex, EventWaitHandle? showEvent)
     {
-        Name = name;
         _mutex = mutex;
         _showEvent = showEvent;
         IsOwner = mutex is not null;
@@ -32,9 +31,6 @@ public sealed class SingleInstanceLock : IDisposable
 
     /// <summary>Raised on a background thread when another instance asked this one to show itself.</summary>
     public event Action? ShowRequested;
-
-    /// <summary>The base name the kernel objects were derived from.</summary>
-    public string Name { get; }
 
     /// <summary>True when this process owns the instance lock; false when another instance already holds it.</summary>
     public bool IsOwner { get; }

@@ -12,6 +12,8 @@ public sealed record PaletteItem(ProfileId Profile, string WorkflowId, string La
 {
     /// <summary>Screen-reader name.</summary>
     public string AutomationName => string.IsNullOrEmpty(Aliases) ? Label : $"{Label}, also {Aliases}";
+
+    public override string ToString() => AutomationName;
 }
 
 /// <summary>Type to search workflows by name or alias; Enter runs the selected one (spec §14 command palette).</summary>

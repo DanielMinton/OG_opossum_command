@@ -22,6 +22,7 @@ public sealed partial class WorkflowLoader
     {
         CommentHandling = JsonCommentHandling.Skip,
         AllowTrailingCommas = true,
+        AllowDuplicateProperties = false,
     };
 
     private readonly ActionRegistry _registry;
@@ -493,7 +494,6 @@ public sealed partial class WorkflowLoader
                 stepName ?? action!.DisplayName,
                 actionId,
                 inputs,
-                inputsReader.Element.Clone(),
                 timeoutSeconds is null ? null : TimeSpan.FromSeconds(timeoutSeconds.Value),
                 dependsOn,
                 onFailure,

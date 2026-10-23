@@ -62,11 +62,12 @@ public sealed class CalendarReadFileAction : WorkflowAction<CalendarReadFileInpu
             CultureInfo.InvariantCulture,
             $"status={result.Status}; events={result.Snapshot?.Events.Count ?? 0}; generatedAt={result.Snapshot?.GeneratedAt.ToString("u", CultureInfo.InvariantCulture) ?? "-"}; attempts={result.Attempts}");
 
-        return result.Status switch
+        if (!result.IsFailure)
         {
-            CalendarStatus.Refused => ActionResult.Failure("calendar-refused", result.Message, output),
-            CalendarStatus.Invalid => ActionResult.Failure("calendar-invalid", result.Message, output),
-            _ => ActionResult.Success(result.Message, output),
-        };
+            return ActionResult.Success(result.Message, output);
+        }
+
+        var code = result.Status == CalendarStatus.Refused ? "calendar-refused" : "calendar-invalid";
+        return ActionResult.Failure(code, result.Message, output);
     }
 }

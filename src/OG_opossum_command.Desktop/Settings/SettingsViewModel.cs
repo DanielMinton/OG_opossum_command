@@ -13,6 +13,11 @@ namespace OG_opossum_command.Desktop.Settings;
 /// <summary>One schedule row shown read-only in Settings.</summary>
 public sealed record ScheduleRow(string Workflow, string Profile, string Schedule, string NextDue, string LastOutcome)
 {
+    /// <summary>Screen-reader name.</summary>
+    public string AutomationName => $"{Workflow} ({Profile}), next {NextDue}, last outcome {LastOutcome}";
+
+    public override string ToString() => AutomationName;
+
     public static ScheduleRow From(TriggerRecord trigger)
     {
         ArgumentNullException.ThrowIfNull(trigger);

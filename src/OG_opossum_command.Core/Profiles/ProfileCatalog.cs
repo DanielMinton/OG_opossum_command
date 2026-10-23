@@ -87,7 +87,7 @@ public sealed class ProfileCatalog
         var collector = new ValidationErrors(policyPath);
         try
         {
-            using var document = JsonDocument.Parse(File.ReadAllText(policyPath), new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
+            using var document = JsonDocument.Parse(File.ReadAllText(policyPath), new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true, AllowDuplicateProperties = false });
             if (document.RootElement.ValueKind != JsonValueKind.Object)
             {
                 collector.Add("$", "The policy file must contain a JSON object.");
@@ -106,7 +106,11 @@ public sealed class ProfileCatalog
                 }
 
                 var calendarFile = root.OptionalString("calendarFile");
-                if (calendarFile is not null && !LooksLikeFullPath(calendarFile))
+                if (calendarFile is not null && calendarFile.Contains('\0', StringComparison.Ordinal))
+                {
+                    collector.Add("calendarFile", "'calendarFile' contains a NUL character (\\u0000); remove it.");
+                }
+                else if (calendarFile is not null && !LooksLikeFullPath(calendarFile))
                 {
                     collector.Add("calendarFile", $"'calendarFile' must be a full path to the calendar JSON file (%VAR% references such as %OneDriveCommercial% are allowed), got '{calendarFile}'.");
                 }
@@ -136,5 +140,5 @@ public sealed class ProfileCatalog
 
     /// <summary>A configured path must be absolute once expanded, or start with a <c>%VAR%</c> that may be unset on this PC right now (OneDrive not signed in).</summary>
     private static bool LooksLikeFullPath(string path) =>
-        path.StartsWith('%') || Path.IsPathFullyQualified(Environment.ExpandEnvironmentVariables(path));
+        !path.Contains('\0', StringComparison.Ordinal) && (path.StartsWith('%') || Path.IsPathFullyQualified(Environment.ExpandEnvironmentVariables(path)));
 }

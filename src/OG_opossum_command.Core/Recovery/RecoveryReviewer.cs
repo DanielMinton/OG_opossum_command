@@ -24,7 +24,10 @@ public sealed record RecoveryDecision(Guid ExecutionId, ProfileId Profile, strin
 /// </summary>
 public static class RecoveryReviewer
 {
-    /// <summary>Classifies <paramref name="interrupted"/> and acts on each. Never throws for a single bad run; the run becomes Needs attention instead.</summary>
+    /// <summary>
+    /// Classifies <paramref name="interrupted"/> (normally <see cref="IHistoryStore.GetPendingRecovery"/>) and acts on
+    /// each. Never throws for a single bad run; the run becomes Needs attention instead.
+    /// </summary>
     public static IReadOnlyList<RecoveryDecision> Review(
         IReadOnlyList<Guid> interrupted,
         IHistoryStore history,
@@ -48,29 +51,57 @@ public static class RecoveryReviewer
                 continue;
             }
 
-            var loaded = workflows.FirstOrDefault(w => w.Profile.Id == execution.Profile);
-            var definition = loaded?.Workflows.FirstOrDefault(w => w.Id == execution.WorkflowId);
-            var problem = Classify(execution, definition, registry);
-            if (problem is null)
+            try
             {
-                var completed = CompletedSteps(execution);
-                var resumed = engine.Start(definition!, loaded!.Profile, new StartOptions(TriggerSources.Recovery, null, execution.Id, completed));
-                var explanation = $"Resumed automatically as run {resumed.Execution.Id}: every unfinished step was safe to repeat ({completed.Count} already-completed step(s) were not repeated).";
-                history.SetRecovery(execution.Id, ExecutionStatus.Interrupted, RecoveryStates.AutoResumed, explanation, now);
-                decisions.Add(new RecoveryDecision(execution.Id, execution.Profile, execution.WorkflowId, execution.WorkflowName, RecoveryStates.AutoResumed, explanation, resumed.Execution.Id));
+                decisions.Add(ReviewOne(execution, history, engine, registry, workflows, now));
             }
-            else
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                history.SetRecovery(execution.Id, ExecutionStatus.NeedsAttention, RecoveryStates.NeedsAttention, problem, now);
-                decisions.Add(new RecoveryDecision(execution.Id, execution.Profile, execution.WorkflowId, execution.WorkflowName, RecoveryStates.NeedsAttention, problem, null));
+                var explanation = $"The recovery check for this run failed ({ex.GetType().Name}: {ex.Message}), so it was not resumed. Resume or Dismiss.";
+                if (TrySetNeedsAttention(history, execution.Id, explanation, now))
+                {
+                    decisions.Add(new RecoveryDecision(execution.Id, execution.Profile, execution.WorkflowId, execution.WorkflowName, RecoveryStates.NeedsAttention, explanation, null));
+                }
             }
         }
 
         return decisions;
     }
 
+    private static RecoveryDecision ReviewOne(ExecutionSnapshot execution, IHistoryStore history, WorkflowEngine engine, ActionRegistry registry, IReadOnlyList<ProfileWorkflows> workflows, DateTimeOffset now)
+    {
+        var loaded = workflows.FirstOrDefault(w => w.Profile.Id == execution.Profile);
+        var definition = loaded?.Workflows.FirstOrDefault(w => w.Id == execution.WorkflowId);
+        var problem = Classify(execution, definition, registry);
+        if (problem is not null)
+        {
+            history.SetRecovery(execution.Id, ExecutionStatus.NeedsAttention, RecoveryStates.NeedsAttention, problem, now);
+            return new RecoveryDecision(execution.Id, execution.Profile, execution.WorkflowId, execution.WorkflowName, RecoveryStates.NeedsAttention, problem, null);
+        }
+
+        var completed = CompletedSteps(execution);
+        var resumed = engine.Start(definition!, loaded!.Profile, new StartOptions(TriggerSources.Recovery, null, execution.Id, completed));
+        var explanation = $"Resumed automatically as run {resumed.Execution.Id}: every unfinished step was safe to repeat ({completed.Count} already-completed step(s) were not repeated).";
+        history.SetRecovery(execution.Id, ExecutionStatus.Interrupted, RecoveryStates.AutoResumed, explanation, now);
+        return new RecoveryDecision(execution.Id, execution.Profile, execution.WorkflowId, execution.WorkflowName, RecoveryStates.AutoResumed, explanation, resumed.Execution.Id);
+    }
+
+    /// <summary>Last resort for a run whose review threw; if even this fails the row stays pending and the next start reviews it again.</summary>
+    private static bool TrySetNeedsAttention(IHistoryStore history, Guid executionId, string explanation, DateTimeOffset now)
+    {
+        try
+        {
+            history.SetRecovery(executionId, ExecutionStatus.NeedsAttention, RecoveryStates.NeedsAttention, explanation, now);
+            return true;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>Operator chose Resume: a new run that skips the steps the interrupted run completed. The current file is used.</summary>
-    /// <exception cref="InvalidOperationException">The run is not waiting for attention, or its workflow does not load.</exception>
+    /// <exception cref="InvalidOperationException">The run is not waiting for attention, its workflow does not load, or another run of the workflow is active (the run stays waiting).</exception>
     public static StartResult Resume(Guid executionId, IHistoryStore history, WorkflowEngine engine, IReadOnlyList<ProfileWorkflows> workflows, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(history);
@@ -89,6 +120,12 @@ public static class RecoveryReviewer
 
         var completed = CompletedSteps(execution);
         var resumed = engine.Start(definition, loaded!.Profile, new StartOptions(TriggerSources.Recovery, null, execution.Id, completed));
+        if (resumed.WasAlreadyRunning)
+        {
+            // Focus-existing returned another run of the workflow; the interrupted remainder has not run. Keep it waiting.
+            throw new InvalidOperationException($"{execution.WorkflowName} is running now; resume this run after it finishes.");
+        }
+
         history.SetRecovery(execution.Id, ExecutionStatus.Interrupted, RecoveryStates.Resumed, $"Resumed by the operator as run {resumed.Execution.Id}; {completed.Count} already-completed step(s) were not repeated.", now);
         return resumed;
     }
@@ -122,8 +159,10 @@ public static class RecoveryReviewer
             return $"{execution.WorkflowName} was changed on disk since this run started, so the remaining steps may not be what they were. Resume runs the current file (skipping the {CompletedSteps(execution).Count} step(s) that completed), or Dismiss.";
         }
 
+        // A step that started and did not complete (interrupted, or failed or cancelled part-way, e.g. a timeout with
+        // onFailure: continue) may have left its side effect half done; repeating it on its own is only safe if idempotent.
         var unsafeSteps = new List<string>();
-        foreach (var step in execution.Steps.Where(s => s.Status == StepStatus.Interrupted && s.StartedAt is not null))
+        foreach (var step in execution.Steps.Where(s => s.StartedAt is not null && s.Status is StepStatus.Interrupted or StepStatus.Failed or StepStatus.Cancelled))
         {
             var idempotent = registry.TryGet(step.ActionId, out var action) && action.Idempotency == IdempotencyClass.Idempotent;
             if (!idempotent)
@@ -134,7 +173,7 @@ public static class RecoveryReviewer
 
         if (unsafeSteps.Count > 0)
         {
-            return $"{string.Join(", ", unsafeSteps)} was running when the app stopped, and repeating it could start a second copy of a program or script. Resume runs it again (steps that completed are not repeated); Dismiss leaves things as they are.";
+            return $"{string.Join(", ", unsafeSteps)} was running (or had started and not completed) when the app stopped, and repeating it could start a second copy of a program or script. Resume runs it again (steps that completed are not repeated); Dismiss leaves things as they are.";
         }
 
         return null;

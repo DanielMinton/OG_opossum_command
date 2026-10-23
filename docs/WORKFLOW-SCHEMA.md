@@ -36,6 +36,10 @@ understands.
 - JSON comments (`//`, `/* */`) and trailing commas are allowed, to make hand editing forgiving.
 - Validation is **strict**: a property that is not listed below is an error (typos are the usual
   cause), a wrong type is an error, and the loader keeps going so one pass reports every problem.
+- A property name that appears **twice** in the same object is an error (it would otherwise be
+  "last one wins", so the file would not do what its first lines say). The same holds for
+  `profile.json` and the calendar file.
+- A NUL character (`\u0000`) in a path or lock is an error, never a crash.
 - A file with errors is **not loaded**. Its errors appear on the dashboard under
   "Workflow files with problems" and in `--smoke-test` output. Other files still load.
 - Error format: `<file>: <json path>: <message>`, for example
@@ -139,7 +143,7 @@ Idempotent. Default timeout 15 s. Opens the folder in the shell's file manager.
 
 | Input | Type | Default | Rules |
 |---|---|---|---|
-| `path` | string | — | Full path to an `.exe` (after expansion). Relative paths and non-`.exe` files are rejected at load time; a missing file fails the step at run time with `executable-not-found`. |
+| `path` | string | — | Full path to an `.exe` (after expansion). Relative paths and non-`.exe` files are rejected at load time; a missing file fails the step at run time with `executable-not-found`. **Shells and script hosts are refused** (`cmd`, `powershell`, `powershell_ise`, `pwsh`, `wscript`, `cscript`, `mshta`, `rundll32`, `regsvr32`, `wsl`, `bash`, `conhost`, `forfiles`, compared by file name), at load time and again at run time (`interpreter-refused`): put the script in the profile's scripts folder and use `windows.script.run`. |
 | `arguments` | array of strings | `[]` | **Always an array.** Each element is passed as one argument; there is no shell and nothing is ever interpolated into a command string (spec §07, §09). A string here is an error. |
 | `workingDirectory` | string | process default | Full path; must exist at run time (`working-directory-not-found`). |
 | `waitForExit` | boolean | `false` | `false`: the step completes as soon as the program starts. `true`: the step waits, captures stdout/stderr (bounded to 8 KB per stream, redacted, capped at 4000 stored characters), and fails with `exit-code` on a non-zero exit. Cancellation or timeout kills the **whole process tree**. |
@@ -156,16 +160,17 @@ Runs a **trusted script from the profile's own scripts folder** and nothing else
 
 | Input | Type | Default | Rules |
 |---|---|---|---|
-| `interpreter` | string | — | `"powershell"` (Windows PowerShell 5.1, run as `powershell.exe -NoProfile -NonInteractive -File <script> <arguments…>`) or `"cmd"` (`cmd.exe /d /c <script> <arguments…>`). Always the copy under `%SystemRoot%\System32`. |
-| `script` | string | — | A **bare file name** inside the scripts folder: letters, digits, spaces, `.`, `_`, `-`; no folders, no `..`. Extension must match the interpreter (`.ps1` ↔ powershell; `.cmd`/`.bat` ↔ cmd). The resolved path is checked again at run time to be inside the folder (`script-outside-folder`); a missing file fails with `script-not-found`. |
-| `arguments` | array of strings | `[]` | Passed after the script path, one element per argument, `%VAR%` expanded. |
+| `interpreter` | string | — | `"powershell"` (Windows PowerShell 5.1, run as `powershell.exe -NoProfile -NonInteractive -File <script> <arguments…>`) or `"cmd"` (`cmd.exe /d /c .\<script> <arguments…>`, started in the scripts folder). Always the copy under `%SystemRoot%\System32`. |
+| `script` | string | — | A **bare file name** inside the scripts folder: letters, digits, spaces, `.`, `_`, `-`; no folders, no `..`. **No spaces for cmd.** Extension must match the interpreter (`.ps1` ↔ powershell; `.cmd`/`.bat` ↔ cmd). The resolved path is checked again at run time to be inside the folder (`script-outside-folder`); a missing file fails with `script-not-found`. |
+| `arguments` | array of strings | `[]` | Passed after the script path, one element per argument, `%VAR%` expanded. **For cmd**, which parses its command line again, no argument may contain `&` `\|` `<` `>` `^` `%` `!` `"` `(` `)` or a line break; this is rejected at load time and checked again at run time (`script-unsafe-for-cmd`). Spaces are fine. Use the powershell interpreter for scripts that need such values or `%VAR%` arguments. |
 
 Non-idempotent. Default timeout 5 minutes. Always waits for exit and captures stdout/stderr (same
 bounds as `windows.process.launch`); the script's working directory is the scripts folder. A
 non-zero exit fails the step with `exit-code`. If PowerShell refuses the script because of the
 PC's **execution policy**, the step fails with `execution-policy-blocked` and a message that says so
 and lists the options (ask IT, or write the script as `.cmd`). The app never passes
-`-ExecutionPolicy` and never changes policy (rule 2).
+`-ExecutionPolicy` and never changes policy (rule 2). cmd cannot use a network (UNC) folder as its
+current folder, so a cmd script refuses to run when the data folder is on a `\\server\share` path.
 
 ### `m365.calendar.readFile` — Read calendar file
 

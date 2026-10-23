@@ -28,7 +28,7 @@ public sealed class ResourceLockTests : IDisposable
     }
 
     private static string ProcessStep(string id, string locks) =>
-        $$"""{ "id": "{{id}}", "action": "windows.process.launch", "inputs": { "path": "%SystemRoot%\\System32\\cmd.exe", "arguments": ["/c", "echo"], "waitForExit": true }, "onFailure": "continue", "locks": [{{locks}}] }""";
+        $$"""{ "id": "{{id}}", "action": "windows.process.launch", "inputs": { "path": "%SystemRoot%\\System32\\PING.EXE", "arguments": ["-n", "1", "127.0.0.1"], "waitForExit": true }, "onFailure": "continue", "locks": [{{locks}}] }""";
 
     private static string Workflow(string id, int maxParallel, params string[] steps) => $$"""
         {

@@ -52,7 +52,7 @@ public sealed class WorkflowEngineTests : IDisposable
         $$"""{ "id": "{{id}}", "action": "windows.url.open", "inputs": { "url": "https://{{id}}.example/" }, "dependsOn": [{{dependsOn}}], "onFailure": "{{onFailure}}" }""";
 
     private static string ProcessStep(string id, string dependsOn = "", string onFailure = "stop", int? timeoutSeconds = null) =>
-        $$"""{ "id": "{{id}}", "action": "windows.process.launch", "inputs": { "path": "%SystemRoot%\\System32\\cmd.exe", "arguments": ["/c", "echo", "{{id}}"], "waitForExit": true }, "dependsOn": [{{dependsOn}}], "onFailure": "{{onFailure}}"{{(timeoutSeconds is null ? "" : $", \"timeoutSeconds\": {timeoutSeconds}")}} }""";
+        $$"""{ "id": "{{id}}", "action": "windows.process.launch", "inputs": { "path": "%SystemRoot%\\System32\\PING.EXE", "arguments": ["-n", "1", "{{id}}"], "waitForExit": true }, "dependsOn": [{{dependsOn}}], "onFailure": "{{onFailure}}"{{(timeoutSeconds is null ? "" : $", \"timeoutSeconds\": {timeoutSeconds}")}} }""";
 
     private List<ExecutionStatus> StatusesOf(Guid id)
     {
@@ -151,13 +151,15 @@ public sealed class WorkflowEngineTests : IDisposable
     [Fact]
     public async Task Cancel_kills_a_real_child_process_tree()
     {
-        // cmd.exe /c ping -n 30 127.0.0.1: cmd is the launched process, ping is its child (rule 7 allows these throwaways).
-        var real = new LauncherSet(new WindowsProcessLauncher(), _launchers.Urls, _launchers.Folders);
+        // A .cmd running ping -n 30 127.0.0.1: cmd is the launched process, ping is its child (rule 7 allows these throwaways).
+        // cmd.exe itself may not be started with windows.process.launch, so the script action provides the tree.
+        _root.WriteScript(ProfileId.Work, "ping.cmd", "@ping -n 30 127.0.0.1\r\n");
+        var real = new LauncherSet(new WindowsProcessLauncher(), _launchers.Urls, _launchers.Folders, _launchers.Dashboard);
         var registry = ActionRegistry.CreateDefault(real);
         using var engine = new WorkflowEngine(registry, _history);
         var profile = _root.Profile(ProfileId.Work, registry);
         var workflow = TestSupport.LoadValid(registry, profile, Workflow(
-            """{ "id": "ping", "action": "windows.process.launch", "inputs": { "path": "%SystemRoot%\\System32\\cmd.exe", "arguments": ["/c", "ping", "-n", "30", "127.0.0.1"], "waitForExit": true } }"""));
+            """{ "id": "ping", "action": "windows.script.run", "inputs": { "interpreter": "cmd", "script": "ping.cmd" } }"""));
 
         var pingsBefore = TestSupport.PingPids();
         var started = engine.Start(workflow, profile);

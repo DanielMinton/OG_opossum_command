@@ -26,9 +26,6 @@ public sealed class ActionRegistry
     /// <summary>All registered IDs, sorted.</summary>
     public IReadOnlyList<string> Ids => _actions.Keys.Order(StringComparer.Ordinal).ToList();
 
-    /// <summary>All registered actions.</summary>
-    public IReadOnlyCollection<IWorkflowAction> Actions => _actions.Values;
-
     public bool Contains(string actionId) => _actions.ContainsKey(actionId);
 
     public bool TryGet(string actionId, out IWorkflowAction action) => _actions.TryGetValue(actionId, out action!);
@@ -49,7 +46,7 @@ public sealed class ActionRegistry
             new FolderOpenAction(launchers.Folders),
             new ScriptRunAction(launchers.Processes),
             new CalendarReadFileAction(calendar),
-            new ScheduleShowAction(calendar, launchers.DashboardOrNoOp),
+            new ScheduleShowAction(calendar, launchers.Dashboard),
         ]);
     }
 }

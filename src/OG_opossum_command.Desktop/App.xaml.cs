@@ -8,6 +8,7 @@ using OG_opossum_command.Core.Notifications;
 using OG_opossum_command.Core.Paths;
 using OG_opossum_command.Core.Profiles;
 using OG_opossum_command.Core.Seeding;
+using OG_opossum_command.Desktop.Accessibility;
 using OG_opossum_command.Desktop.CommandPalette;
 using OG_opossum_command.Desktop.Shell;
 using OG_opossum_command.Desktop.Tray;
@@ -133,6 +134,8 @@ public partial class App : Application, IDashboardPresenter
         MainWindow?.Hide();
         if (Host is not null)
         {
+            // Stop the scheduler first so nothing new starts during the engine's grace period.
+            Host.Scheduler.Dispose();
             await Host.Engine.ShutdownAsync(TimeSpan.FromSeconds(5));
         }
 
@@ -142,6 +145,7 @@ public partial class App : Application, IDashboardPresenter
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        FontScale.Track(this);
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
         var paths = PathsOverride ?? AppPaths.FromEnvironment();

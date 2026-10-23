@@ -7,14 +7,12 @@ using OG_opossum_command.Core.Workflows;
 namespace OG_opossum_command.Core.Scheduling;
 
 /// <summary>What the scheduler did about one trigger during a tick (for the UI and tests).</summary>
-/// <param name="TriggerId">The trigger row.</param>
 /// <param name="Profile">Owning profile.</param>
 /// <param name="WorkflowId">The workflow.</param>
 /// <param name="WorkflowName">Display name.</param>
 /// <param name="Kind">One of <see cref="SchedulerEventKinds"/>.</param>
 /// <param name="Message">One readable line.</param>
-/// <param name="OccurredAt">The schedule occurrence concerned, when there is one.</param>
-public sealed record SchedulerEvent(string TriggerId, ProfileId Profile, string WorkflowId, string WorkflowName, string Kind, string Message, DateTimeOffset? OccurredAt);
+public sealed record SchedulerEvent(ProfileId Profile, string WorkflowId, string WorkflowName, string Kind, string Message);
 
 /// <summary>Values of <see cref="SchedulerEvent.Kind"/>.</summary>
 public static class SchedulerEventKinds
@@ -38,6 +36,9 @@ public sealed class Scheduler : IDisposable
 
     /// <summary>Longest the loop sleeps between ticks even when nothing is due (catches clock jumps and wake-from-sleep).</summary>
     public static readonly TimeSpan MaxSleep = TimeSpan.FromSeconds(30);
+
+    /// <summary>Pause after an unexpected loop failure before trying again.</summary>
+    public static readonly TimeSpan ErrorBackOff = TimeSpan.FromSeconds(30);
 
     private readonly IHistoryStore _history;
     private readonly WorkflowEngine _engine;
@@ -83,6 +84,18 @@ public sealed class Scheduler : IDisposable
     /// </summary>
     public void Reconcile(DateTimeOffset now)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        // Under the tick gate, so a concurrent tick can never write back the old config hash or floor.
+        lock (_tickGate)
+        {
+            ReconcileCore(now);
+            TickCore(now);
+        }
+    }
+
+    private void ReconcileCore(DateTimeOffset now)
+    {
         var live = new HashSet<string>(StringComparer.Ordinal);
         foreach (var (workflow, _) in ScheduledWorkflows())
         {
@@ -114,8 +127,6 @@ public sealed class Scheduler : IDisposable
         {
             _history.DeleteTrigger(stale.Id);
         }
-
-        Tick(now);
     }
 
     /// <summary>
@@ -136,7 +147,7 @@ public sealed class Scheduler : IDisposable
     private void TickCore(DateTimeOffset now)
     {
         var paused = IsPaused;
-        foreach (var (workflow, profile) in ScheduledWorkflows())
+        foreach (var (workflow, _) in ScheduledWorkflows())
         {
             var schedule = workflow.Schedule!;
             var trigger = _history.GetTrigger(TriggerRecord.IdFor(workflow.ProfileId, workflow.Id));
@@ -171,7 +182,7 @@ public sealed class Scheduler : IDisposable
             if (paused)
             {
                 outcome = $"Paused: skipped {due.Count.ToString(CultureInfo.InvariantCulture)} occurrence(s)";
-                Raise(trigger, workflow, SchedulerEventKinds.Paused, $"{workflow.Name}: scheduler paused, skipped {Describe(due)}", due[^1]);
+                Raise(workflow, SchedulerEventKinds.Paused, $"{workflow.Name}: scheduler paused, skipped {Describe(due)}");
             }
             else
             {
@@ -180,7 +191,7 @@ public sealed class Scheduler : IDisposable
                     switch (schedule.MissedRuns)
                     {
                         case MissedRunPolicy.Skip:
-                            Raise(trigger, workflow, SchedulerEventKinds.Skipped, $"{workflow.Name}: skipped {Describe(missed)} missed while the app was not running", missed[^1]);
+                            Raise(workflow, SchedulerEventKinds.Skipped, $"{workflow.Name}: skipped {Describe(missed)} missed while the app was not running");
                             break;
                         case MissedRunPolicy.RunOnce:
                             toRun.Add(new PendingRun(missed[^1], IsCatchUp: true));
@@ -189,7 +200,7 @@ public sealed class Scheduler : IDisposable
                             var catchUp = missed.TakeLast(schedule.CatchUpLimit).ToList();
                             if (catchUp.Count < missed.Count)
                             {
-                                Raise(trigger, workflow, SchedulerEventKinds.Skipped, $"{workflow.Name}: catching up the last {catchUp.Count.ToString(CultureInfo.InvariantCulture)} of {missed.Count.ToString(CultureInfo.InvariantCulture)} missed occurrences", missed[^1]);
+                                Raise(workflow, SchedulerEventKinds.Skipped, $"{workflow.Name}: catching up the last {catchUp.Count.ToString(CultureInfo.InvariantCulture)} of {missed.Count.ToString(CultureInfo.InvariantCulture)} missed occurrences");
                             }
 
                             toRun.AddRange(catchUp.Select(c => new PendingRun(c, IsCatchUp: true)));
@@ -208,7 +219,7 @@ public sealed class Scheduler : IDisposable
 
             if (toRun.Count > 0)
             {
-                Enqueue(trigger, workflow, profile, toRun);
+                Enqueue(trigger.Id, toRun);
             }
         }
     }
@@ -261,12 +272,13 @@ public sealed class Scheduler : IDisposable
         var token = _stopping.Token;
         while (!token.IsCancellationRequested)
         {
+            var delay = ErrorBackOff;
             try
             {
                 var now = _time.GetUtcNow();
                 Tick(now);
                 var next = _history.GetTriggers().Where(t => t.Enabled && t.NextDueAt is not null).Select(t => t.NextDueAt!.Value).DefaultIfEmpty(now + MaxSleep).Min();
-                var delay = next - _time.GetUtcNow();
+                delay = next - _time.GetUtcNow();
                 if (delay > MaxSleep)
                 {
                     delay = MaxSleep;
@@ -276,29 +288,51 @@ public sealed class Scheduler : IDisposable
                 {
                     delay = TimeSpan.FromSeconds(1);
                 }
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                if (token.IsCancellationRequested || _disposed)
+                {
+                    // Store or scheduler closed under us (shutdown); stop quietly.
+                    return;
+                }
 
+                // Anything else (a transient SQLITE_BUSY, a bad workflow snapshot) must not end scheduling for the
+                // rest of the session: record it and try again after a pause.
+                RecordLoopError(ex);
+            }
+
+            try
+            {
                 await Task.Delay(delay, _time, token).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
                 return;
             }
-            catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException or Microsoft.Data.Sqlite.SqliteException)
-            {
-                // Store closed under us (shutdown); stop quietly.
-                return;
-            }
         }
     }
 
-    private void Enqueue(TriggerRecord trigger, WorkflowDefinition workflow, Profile profile, List<PendingRun> runs)
+    private void RecordLoopError(Exception ex)
+    {
+        try
+        {
+            _history.SetSetting(SettingKeys.SchedulerLastError, OutputRedactor.Redact($"{_time.GetUtcNow():u} {ex.GetType().Name}: {ex.Message}", WorkflowEngine.MaxMessageChars)!);
+        }
+        catch (Exception secondary) when (secondary is not OutOfMemoryException)
+        {
+            // The store itself is failing; the next pass tries again.
+        }
+    }
+
+    private void Enqueue(string triggerId, List<PendingRun> runs)
     {
         lock (_gate)
         {
-            if (!_queues.TryGetValue(trigger.Id, out var queue))
+            if (!_queues.TryGetValue(triggerId, out var queue))
             {
                 queue = new Queue<PendingRun>();
-                _queues[trigger.Id] = queue;
+                _queues[triggerId] = queue;
             }
 
             foreach (var run in runs)
@@ -306,14 +340,14 @@ public sealed class Scheduler : IDisposable
                 queue.Enqueue(run);
             }
 
-            if (!_dispatchers.ContainsKey(trigger.Id))
+            if (!_dispatchers.ContainsKey(triggerId))
             {
-                _dispatchers[trigger.Id] = Task.Run(() => DispatchAsync(trigger.Id, workflow, profile));
+                _dispatchers[triggerId] = Task.Run(() => DispatchAsync(triggerId));
             }
         }
     }
 
-    private async Task DispatchAsync(string triggerId, WorkflowDefinition workflow, Profile profile)
+    private async Task DispatchAsync(string triggerId)
     {
         try
         {
@@ -337,6 +371,15 @@ public sealed class Scheduler : IDisposable
                     continue;
                 }
 
+                // Resolve the definition and profile now, not when the dispatcher was created, so a reload in between
+                // is honoured; a workflow that is no longer loaded (or no longer scheduled) is not started.
+                var current = Resolve(trigger);
+                if (current is null)
+                {
+                    continue;
+                }
+
+                var (workflow, profile) = current.Value;
                 StartResult started;
                 try
                 {
@@ -344,8 +387,8 @@ public sealed class Scheduler : IDisposable
                 }
                 catch (ActionNotAllowedException ex)
                 {
-                    Raise(trigger, workflow, SchedulerEventKinds.Refused, ex.Message, pending.Occurrence);
-                    _history.UpsertTrigger(trigger with { LastOutcome = $"Refused: {ex.Message}", UpdatedAt = _time.GetUtcNow() });
+                    Raise(workflow, SchedulerEventKinds.Refused, ex.Message);
+                    _history.UpdateTriggerOutcome(triggerId, null, $"Refused: {ex.Message}", _time.GetUtcNow());
                     continue;
                 }
                 catch (ObjectDisposedException)
@@ -357,13 +400,13 @@ public sealed class Scheduler : IDisposable
                 if (started.WasAlreadyRunning)
                 {
                     // Duplicate suppression: the workflow is still active, so the occurrence is dropped, not queued (focus-existing).
-                    Raise(trigger, workflow, SchedulerEventKinds.Suppressed, $"{workflow.Name}: still running, so the {pending.Occurrence:HH:mm} occurrence was not started again", pending.Occurrence);
-                    _history.UpsertTrigger(trigger with { LastOutcome = $"Suppressed {pending.Occurrence:u}: already running", UpdatedAt = now });
+                    Raise(workflow, SchedulerEventKinds.Suppressed, $"{workflow.Name}: still running, so the {pending.Occurrence:HH:mm} occurrence was not started again");
+                    _history.UpdateTriggerOutcome(triggerId, null, $"Suppressed {pending.Occurrence:u}: already running", now);
                     continue;
                 }
 
-                Raise(trigger, workflow, SchedulerEventKinds.Started, pending.IsCatchUp ? $"{workflow.Name}: catching up the {pending.Occurrence:HH:mm} run" : $"{workflow.Name}: scheduled run started", pending.Occurrence);
-                _history.UpsertTrigger(trigger with { LastFiredAt = now, LastOutcome = $"Started {pending.Occurrence:u} as run {started.Execution.Id}", UpdatedAt = now });
+                Raise(workflow, SchedulerEventKinds.Started, pending.IsCatchUp ? $"{workflow.Name}: catching up the {pending.Occurrence:HH:mm} run" : $"{workflow.Name}: scheduled run started");
+                _history.UpdateTriggerOutcome(triggerId, now, $"Started {pending.Occurrence:u} as run {started.Execution.Id}", now);
 
                 if (pending.IsCatchUp)
                 {
@@ -389,6 +432,19 @@ public sealed class Scheduler : IDisposable
         }
     }
 
+    private (WorkflowDefinition Workflow, Profile Profile)? Resolve(TriggerRecord trigger)
+    {
+        foreach (var (workflow, profile) in ScheduledWorkflows())
+        {
+            if (workflow.ProfileId == trigger.Profile && workflow.Id == trigger.WorkflowId)
+            {
+                return (workflow, profile);
+            }
+        }
+
+        return null;
+    }
+
     private IEnumerable<(WorkflowDefinition Workflow, Profile Profile)> ScheduledWorkflows()
     {
         foreach (var loaded in _workflows())
@@ -400,8 +456,28 @@ public sealed class Scheduler : IDisposable
         }
     }
 
-    private void Raise(TriggerRecord trigger, WorkflowDefinition workflow, string kind, string message, DateTimeOffset? occurrence) =>
-        Fired?.Invoke(this, new SchedulerEvent(trigger.Id, trigger.Profile, workflow.Id, workflow.Name, kind, message, occurrence));
+    /// <summary>Invokes each subscriber on its own, so one that throws can neither silence the others nor abort a tick before it persists.</summary>
+    private void Raise(WorkflowDefinition workflow, string kind, string message)
+    {
+        var handlers = Fired;
+        if (handlers is null)
+        {
+            return;
+        }
+
+        var fired = new SchedulerEvent(workflow.ProfileId, workflow.Id, workflow.Name, kind, message);
+        foreach (var handler in handlers.GetInvocationList().Cast<EventHandler<SchedulerEvent>>())
+        {
+            try
+            {
+                handler(this, fired);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // A notification sink failing is not a scheduling failure.
+            }
+        }
+    }
 
     private static string Describe(IReadOnlyList<DateTimeOffset> occurrences) =>
         occurrences.Count == 1

@@ -133,7 +133,8 @@ public sealed class CoreHost : IDisposable
 
             if (options.ReviewInterruptedRuns)
             {
-                host.RecoveryDecisions = RecoveryReviewer.Review(interrupted, history, engine, actions, host.Workflows, now);
+                // From the database, not just this boot's list: a run an earlier boot marked but never reviewed is not stranded.
+                host.RecoveryDecisions = RecoveryReviewer.Review(history.GetPendingRecovery(), history, engine, actions, host.Workflows, now);
             }
 
             host.Scheduler.Reconcile(now);

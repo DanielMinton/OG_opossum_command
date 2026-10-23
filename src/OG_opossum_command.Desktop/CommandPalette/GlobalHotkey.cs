@@ -32,9 +32,6 @@ internal sealed class GlobalHotkey : IDisposable
         _pressed = pressed;
     }
 
-    /// <summary>The gesture currently registered, or the one that failed.</summary>
-    public HotkeyGesture? Gesture { get; private set; }
-
     public bool IsRegistered { get; private set; }
 
     /// <summary>Why registration failed, in plain words; <c>null</c> when registered.</summary>
@@ -46,7 +43,6 @@ internal sealed class GlobalHotkey : IDisposable
         ArgumentNullException.ThrowIfNull(gesture);
         ObjectDisposedException.ThrowIf(_disposed, this);
         Unregister();
-        Gesture = gesture;
 
         var handle = new WindowInteropHelper(_window).EnsureHandle();
         _source ??= HwndSource.FromHwnd(handle);

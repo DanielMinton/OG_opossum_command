@@ -38,6 +38,13 @@ public sealed class FolderOpenAction : WorkflowAction<FolderOpenInputs>
             return null;
         }
 
+        // Checked before expansion: ExpandEnvironmentVariables cuts a string at a NUL, which would open a parent folder.
+        if (path.Contains('\0', StringComparison.Ordinal))
+        {
+            inputs.AddError("path", "'path' contains a NUL character (\\u0000).");
+            return null;
+        }
+
         if (!System.IO.Path.IsPathFullyQualified(Environment.ExpandEnvironmentVariables(path)))
         {
             inputs.AddError("path", $"'path' must be a full folder path (got '{path}'). %VAR% references are allowed.");

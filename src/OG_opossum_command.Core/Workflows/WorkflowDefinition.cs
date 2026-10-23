@@ -1,4 +1,3 @@
-using System.Text.Json;
 using OG_opossum_command.Core.Profiles;
 using OG_opossum_command.Core.Scheduling;
 
@@ -47,7 +46,6 @@ public sealed record StepDefinition(
     string Name,
     string ActionId,
     object Inputs,
-    JsonElement RawInputs,
     TimeSpan? Timeout,
     IReadOnlyList<string> DependsOn,
     OnFailurePolicy OnFailure,

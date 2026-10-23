@@ -37,8 +37,6 @@ public sealed record CalendarReadResult(
     CalendarStatus Status,
     string Message,
     CalendarSnapshot? Snapshot,
-    DateTimeOffset ReadAt,
-    string? FilePath,
     int Attempts)
 {
     /// <summary>Whether a workflow step should fail on this result (only <see cref="CalendarStatus.Refused"/> and <see cref="CalendarStatus.Invalid"/>).</summary>
@@ -100,30 +98,34 @@ public sealed class CalendarService
     {
         ArgumentNullException.ThrowIfNull(profile);
         var age = maxAge ?? DefaultMaxAge;
-        var now = _time.GetUtcNow();
 
         CalendarReadResult result;
         if (!profile.IsActionAllowed(CalendarReadFileAction.ActionId))
         {
-            result = new CalendarReadResult(profile.Id, CalendarStatus.NotAllowed, $"The {profile.DisplayName} profile is not allowed to read a calendar ({CalendarReadFileAction.ActionId} is outside its allowlist).", null, now, null, 0);
+            result = new CalendarReadResult(profile.Id, CalendarStatus.NotAllowed, $"The {profile.DisplayName} profile is not allowed to read a calendar ({CalendarReadFileAction.ActionId} is outside its allowlist).", null, 0);
         }
         else if (profile.CalendarFilePath is null)
         {
-            result = new CalendarReadResult(profile.Id, CalendarStatus.NotConfigured, $"No calendar file is configured for the {profile.DisplayName} profile. See docs/POWER_AUTOMATE_FLOW.md to set one up.", null, now, null, 0);
+            result = new CalendarReadResult(profile.Id, CalendarStatus.NotConfigured, $"No calendar file is configured for the {profile.DisplayName} profile. See docs/POWER_AUTOMATE_FLOW.md to set one up.", null, 0);
         }
         else
         {
             var expanded = Environment.ExpandEnvironmentVariables(profile.CalendarFilePath);
-            if (!Path.IsPathFullyQualified(expanded))
+            if (profile.CalendarFilePath.Contains('\0', StringComparison.Ordinal))
             {
-                result = new CalendarReadResult(profile.Id, CalendarStatus.Unavailable, $"Calendar unavailable: '{profile.CalendarFilePath}' is not a full path on this PC (is OneDrive signed in?).", null, now, profile.CalendarFilePath, 0);
+                // Expansion would cut the path at the NUL and Path.GetFullPath throws on it; a bad setting is reported, never thrown (ADR-039).
+                result = new CalendarReadResult(profile.Id, CalendarStatus.Unavailable, $"Calendar unavailable: the calendar file path for the {profile.DisplayName} profile contains a NUL character (\\u0000).", null, 0);
+            }
+            else if (!Path.IsPathFullyQualified(expanded))
+            {
+                result = new CalendarReadResult(profile.Id, CalendarStatus.Unavailable, $"Calendar unavailable: '{profile.CalendarFilePath}' is not a full path on this PC (is OneDrive signed in?).", null, 0);
             }
             else
             {
                 var path = Path.GetFullPath(expanded);
                 var refusal = CrossProfileRefusal(profile, path);
                 result = refusal is not null
-                    ? new CalendarReadResult(profile.Id, CalendarStatus.Refused, refusal, null, now, path, 0)
+                    ? new CalendarReadResult(profile.Id, CalendarStatus.Refused, refusal, null, 0)
                     : await ReadFileAsync(profile, path, age, cancellationToken).ConfigureAwait(false);
             }
         }
@@ -182,7 +184,7 @@ public sealed class CalendarService
     {
         var now = _time.GetUtcNow();
         CalendarReadResult Unavailable(string reason) =>
-            new(profile.Id, CalendarStatus.Unavailable, $"Calendar unavailable: {reason}", null, now, path, attempts);
+            new(profile.Id, CalendarStatus.Unavailable, $"Calendar unavailable: {reason}", null, attempts);
 
         try
         {
@@ -212,7 +214,7 @@ public sealed class CalendarService
             if (!parsed.IsValid)
             {
                 var shown = string.Join("; ", parsed.Errors.Take(3).Select(e => $"{e.JsonPath}: {e.Message}"));
-                return (new CalendarReadResult(profile.Id, CalendarStatus.Invalid, $"Calendar file {path} is not in the expected shape: {shown} See docs/POWER_AUTOMATE_FLOW.md for the exact JSON.", null, now, path, attempts), true);
+                return (new CalendarReadResult(profile.Id, CalendarStatus.Invalid, $"Calendar file {path} is not in the expected shape: {shown} See docs/POWER_AUTOMATE_FLOW.md for the exact JSON.", null, attempts), true);
             }
 
             var snapshot = parsed.Snapshot!;
@@ -221,10 +223,10 @@ public sealed class CalendarService
             var count = snapshot.Events.Count;
             if (age > maxAge)
             {
-                return (new CalendarReadResult(profile.Id, CalendarStatus.Stale, $"Loaded {count} event(s), but the file is {DescribeAge(age)} old (updated {updated}); is the flow still running?", snapshot, now, path, attempts), false);
+                return (new CalendarReadResult(profile.Id, CalendarStatus.Stale, $"Loaded {count} event(s), but the file is {DescribeAge(age)} old (updated {updated}); is the flow still running?", snapshot, attempts), false);
             }
 
-            return (new CalendarReadResult(profile.Id, CalendarStatus.Loaded, $"Loaded {count} event(s); updated {updated}.", snapshot, now, path, attempts), false);
+            return (new CalendarReadResult(profile.Id, CalendarStatus.Loaded, $"Loaded {count} event(s); updated {updated}.", snapshot, attempts), false);
         }
         catch (IOException ex)
         {
