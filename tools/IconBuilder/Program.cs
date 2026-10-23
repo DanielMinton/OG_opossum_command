@@ -20,7 +20,7 @@ internal static class Program
         Directory.CreateDirectory(outDir);
         var face = args.Length >= 5
             ? new Int32Rect(int.Parse(args[2]), int.Parse(args[3]), int.Parse(args[4]), int.Parse(args[4]))
-            : new Int32Rect(560, 40, 480, 480);
+            : new Int32Rect(215, 300, 900, 900);
 
         // Full picture centred in a square, in source pixels.
         int side = Math.Max(src.PixelWidth, src.PixelHeight);

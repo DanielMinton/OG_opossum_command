@@ -8,8 +8,8 @@
 
 To regenerate after changing the artwork:
 
-    dotnet run --project tools/IconBuilder -- "<full path to source png>" "<output folder>" [faceX faceY faceSize]
+    dotnet run --project tools/IconBuilder -- "<full path to source png>" "<output folder>" [cropX cropY cropSize]
 
-The three optional numbers choose the face close-up used for the 16 to 32 px sizes (default 560 40 480).
+The three optional numbers choose the close-up of the Microsoft 365 hexagon used for the 16 to 32 px sizes (default 215 300 900).
 The artwork contains Microsoft 365 and OneDrive logos. Fine for your PC and inside YMCA; replace that
 part before using the icon anywhere public (ADR-056).
