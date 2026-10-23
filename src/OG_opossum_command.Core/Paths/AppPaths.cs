@@ -1,3 +1,5 @@
+using OG_opossum_command.Core.Profiles;
+
 namespace OG_opossum_command.Core.Paths;
 
 /// <summary>
@@ -20,12 +22,14 @@ public sealed class AppPaths : IAppPaths
     /// <summary>Folder name under <c>%LOCALAPPDATA%</c> when no override is set (ADR-000).</summary>
     public const string DefaultFolderName = "OG_opossum_command";
 
+    /// <summary>File name of the SQLite database under the data root.</summary>
+    public const string DatabaseFileName = "data.db";
+
     private AppPaths(string dataRoot, bool isOverridden)
     {
         DataRoot = dataRoot;
         IsOverridden = isOverridden;
-        DatabasePath = Path.Combine(dataRoot, "OG_opossum_command.db");
-        WorkflowsDirectory = Path.Combine(dataRoot, "workflows");
+        DatabasePath = Path.Combine(dataRoot, DatabaseFileName);
         ProfilesDirectory = Path.Combine(dataRoot, "profiles");
         LogsDirectory = Path.Combine(dataRoot, "logs");
     }
@@ -40,19 +44,26 @@ public sealed class AppPaths : IAppPaths
     public string DatabasePath { get; }
 
     /// <inheritdoc />
-    public string WorkflowsDirectory { get; }
-
-    /// <inheritdoc />
     public string ProfilesDirectory { get; }
 
     /// <inheritdoc />
     public string LogsDirectory { get; }
+
+    /// <inheritdoc />
+    public string GetProfileDirectory(ProfileId profile) => Path.Combine(ProfilesDirectory, profile.FolderName());
+
+    /// <inheritdoc />
+    public string GetProfileWorkflowsDirectory(ProfileId profile) => Path.Combine(GetProfileDirectory(profile), "workflows");
 
     /// <summary>Resolves paths from the real process environment.</summary>
     public static AppPaths FromEnvironment() =>
         Resolve(
             Environment.GetEnvironmentVariable,
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.DoNotVerify));
+
+    /// <summary>Resolves paths rooted at an explicit absolute folder (smoke modes and tests).</summary>
+    /// <exception cref="InvalidOperationException"><paramref name="dataRoot"/> is not an absolute path.</exception>
+    public static AppPaths ForRoot(string dataRoot) => Resolve(_ => dataRoot, localAppDataPath: string.Empty);
 
     /// <summary>
     /// Resolves paths from injected inputs so tests never have to mutate the process environment.

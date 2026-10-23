@@ -1,0 +1,105 @@
+<UserControl x:Class="OG_opossum_command.Desktop.History.HistoryView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:local="clr-namespace:OG_opossum_command.Desktop.History"
+             xmlns:dashboard="clr-namespace:OG_opossum_command.Desktop.Dashboard"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=local:HistoryViewModel}"
+             Focusable="False"
+             AutomationProperties.Name="History">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" MinWidth="280" />
+            <ColumnDefinition Width="6" />
+            <ColumnDefinition Width="*" MinWidth="240" />
+        </Grid.ColumnDefinitions>
+
+        <DockPanel Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3" Margin="6,0,6,6">
+            <Button DockPanel.Dock="Right"
+                    Content="_Refresh"
+                    Style="{StaticResource OgocButton}"
+                    Command="{Binding RefreshCommand}"
+                    AutomationProperties.Name="Refresh history" />
+            <TextBlock Style="{StaticResource OgocHeading}" VerticalAlignment="Center" Margin="0">
+                <Run Text="HISTORY · " />
+                <Run Text="{Binding ProfileName, Mode=OneWay}" />
+                <Run Text=" profile" />
+            </TextBlock>
+        </DockPanel>
+
+        <ListView Grid.Row="1" Grid.Column="0"
+                  Margin="6,0,0,0"
+                  ItemsSource="{Binding Runs}"
+                  SelectedItem="{Binding SelectedRun, Mode=TwoWay}"
+                  Style="{StaticResource OgocList}"
+                  SelectionMode="Single"
+                  AutomationProperties.Name="Past runs">
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn Header="When" Width="130" DisplayMemberBinding="{Binding When}" />
+                    <GridViewColumn Header="Workflow" Width="160" DisplayMemberBinding="{Binding WorkflowName}" />
+                    <GridViewColumn Header="Status" Width="100" DisplayMemberBinding="{Binding Status}" />
+                </GridView>
+            </ListView.View>
+        </ListView>
+
+        <GridSplitter Grid.Row="1" Grid.Column="1"
+                      Width="6"
+                      HorizontalAlignment="Stretch"
+                      Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
+                      FocusVisualStyle="{StaticResource OgocFocusVisual}"
+                      AutomationProperties.Name="Resize history panes" />
+
+        <Grid Grid.Row="1" Grid.Column="2" Margin="0,0,6,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0"
+                       Text="{Binding DetailTitle}"
+                       FontWeight="SemiBold"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,6"
+                       AutomationProperties.LiveSetting="Polite" />
+
+            <ItemsControl Grid.Row="1" ItemsSource="{Binding Steps}" Focusable="False" AutomationProperties.Name="Steps of the selected run">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type dashboard:StepRow}">
+                        <TextBlock Margin="4,1" TextWrapping="Wrap" AutomationProperties.Name="{Binding Status}">
+                            <Run Text="{Binding Glyph, Mode=OneWay}" FontWeight="Bold" />
+                            <Run Text=" " />
+                            <Run Text="{Binding Text, Mode=OneWay}" />
+                        </TextBlock>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <TextBlock Grid.Row="2" Style="{StaticResource OgocHeading}" Text="EVENTS" Margin="0,10,0,4" />
+
+            <ListBox Grid.Row="3"
+                     ItemsSource="{Binding Events}"
+                     FontFamily="Consolas"
+                     FontSize="12"
+                     FocusVisualStyle="{StaticResource OgocFocusVisual}"
+                     Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
+                     Foreground="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     AutomationProperties.Name="Events of the selected run">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding}" TextWrapping="Wrap" />
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Grid>
+    </Grid>
+</UserControl>

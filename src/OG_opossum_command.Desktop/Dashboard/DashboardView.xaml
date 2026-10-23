@@ -1,0 +1,136 @@
+<UserControl x:Class="OG_opossum_command.Desktop.Dashboard.DashboardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:local="clr-namespace:OG_opossum_command.Desktop.Dashboard"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=local:DashboardViewModel}"
+             Focusable="False"
+             AutomationProperties.Name="Dashboard">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Six tiles, stable positions (spec §14) -->
+        <ItemsControl Grid.Row="0"
+                      ItemsSource="{Binding Tiles}"
+                      Focusable="False"
+                      KeyboardNavigation.TabNavigation="Continue"
+                      AutomationProperties.Name="Workflow tiles">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <UniformGrid Columns="3" Rows="2" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type local:WorkflowTile}">
+                    <Button Style="{StaticResource OgocTile}"
+                            Command="{Binding DataContext.RunCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            CommandParameter="{Binding}"
+                            IsEnabled="{Binding IsEnabled}"
+                            ToolTip="{Binding Description}"
+                            AutomationProperties.Name="{Binding AutomationName}"
+                            AutomationProperties.HelpText="{Binding Description}">
+                        <TextBlock Text="{Binding Name}" TextWrapping="Wrap" TextAlignment="Center" />
+                    </Button>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- Feedback line -->
+        <TextBlock Grid.Row="1"
+                   Margin="6,4,6,0"
+                   Text="{Binding StatusMessage}"
+                   TextWrapping="Wrap"
+                   AutomationProperties.LiveSetting="Polite" />
+
+        <!-- Workflow files that did not validate -->
+        <Border Grid.Row="2"
+                Margin="6,6,6,0"
+                Padding="8"
+                BorderThickness="1"
+                BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
+                Visibility="{Binding HasLoadErrors, Converter={StaticResource BoolToVis}}">
+            <StackPanel>
+                <TextBlock Style="{StaticResource OgocHeading}" Text="WORKFLOW FILES WITH PROBLEMS (fix the file, then switch profile to reload)" />
+                <ItemsControl ItemsSource="{Binding LoadErrors}" Focusable="False">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding}" TextWrapping="Wrap" FontFamily="Consolas" FontSize="12" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Border>
+
+        <!-- Active execution -->
+        <Border Grid.Row="3"
+                Margin="6,8,6,0"
+                Padding="10"
+                BorderThickness="2"
+                BorderBrush="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}"
+                Visibility="{Binding HasActiveRun, Converter={StaticResource BoolToVis}}"
+                AutomationProperties.Name="Active execution">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                    <TextBlock Style="{StaticResource OgocHeading}" Text="ACTIVE EXECUTION" />
+                    <TextBlock FontSize="16" FontWeight="SemiBold" AutomationProperties.LiveSetting="Polite">
+                        <Run Text="{Binding ActiveTitle, Mode=OneWay}" />
+                        <Run Text="  ▸  " />
+                        <Run Text="{Binding ActiveProgress, Mode=OneWay}" />
+                    </TextBlock>
+                    <ItemsControl ItemsSource="{Binding ActiveSteps}" Margin="0,6,0,0" Focusable="False">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type local:StepRow}">
+                                <TextBlock Margin="4,1" AutomationProperties.Name="{Binding Status}">
+                                    <Run Text="{Binding Glyph, Mode=OneWay}" FontWeight="Bold" />
+                                    <Run Text=" " />
+                                    <Run Text="{Binding Text, Mode=OneWay}" />
+                                </TextBlock>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+                <Button Grid.Column="1"
+                        Content="_Cancel"
+                        Style="{StaticResource OgocCancel}"
+                        Command="{Binding CancelCommand}"
+                        VerticalAlignment="Top"
+                        Margin="12,0,0,0"
+                        AutomationProperties.Name="Cancel the active run" />
+            </Grid>
+        </Border>
+
+        <!-- Recent runs -->
+        <DockPanel Grid.Row="4" Margin="6,10,6,0">
+            <TextBlock DockPanel.Dock="Top" Style="{StaticResource OgocHeading}" Text="RECENT RUNS" />
+            <ListView ItemsSource="{Binding RecentRuns}"
+                      Style="{StaticResource OgocList}"
+                      AutomationProperties.Name="Recent runs"
+                      SelectionMode="Single">
+                <ListView.View>
+                    <GridView>
+                        <GridViewColumn Header="When" Width="130" DisplayMemberBinding="{Binding When}" />
+                        <GridViewColumn Header="Workflow" Width="180" DisplayMemberBinding="{Binding WorkflowName}" />
+                        <GridViewColumn Header="Status" Width="100" DisplayMemberBinding="{Binding Status}" />
+                        <GridViewColumn Header="Result" Width="320" DisplayMemberBinding="{Binding Summary}" />
+                    </GridView>
+                </ListView.View>
+            </ListView>
+        </DockPanel>
+    </Grid>
+</UserControl>

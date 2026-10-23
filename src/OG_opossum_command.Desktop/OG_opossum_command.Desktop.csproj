@@ -3,10 +3,11 @@
   <!--
     Desktop: the WPF tray application. AssemblyName makes the executable OG_opossum_command.exe
     (rule 0) while the namespace stays OG_opossum_command.Desktop.
-    Program.Main is the single entry point (StartupObject) so the smoke-test switch is handled before
+    Program.Main is the single entry point (StartupObject) so the smoke switches are handled before
     the WPF Application is ever constructed; App.xaml remains the ApplicationDefinition for resources.
     No RuntimeIdentifier or custom OutputPath here: the build script publishes with -r win-x64 and
     looks for the Debug exe under bin/Debug.
+    The example workflows ship next to the exe (examples\workflows\...) for first-run seeding.
   -->
 
   <PropertyGroup>
@@ -20,7 +21,19 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="H.NotifyIcon.Wpf" Version="2.4.1" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\OG_opossum_command.Core\OG_opossum_command.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\examples\workflows\**\*.json"
+             Link="examples\workflows\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

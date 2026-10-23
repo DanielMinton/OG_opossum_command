@@ -1,3 +1,5 @@
+using OG_opossum_command.Core.Profiles;
+
 namespace OG_opossum_command.Core.Paths;
 
 /// <summary>
@@ -12,15 +14,18 @@ public interface IAppPaths
     /// <summary>Whether <see cref="DataRoot"/> came from the <c>OGOC_DATA_DIR</c> environment variable.</summary>
     bool IsOverridden { get; }
 
-    /// <summary>SQLite database holding runs, history, and settings (ADR-008).</summary>
+    /// <summary>SQLite database holding runs, history, and settings (ADR-008): <c>&lt;DataRoot&gt;\data.db</c>.</summary>
     string DatabasePath { get; }
 
-    /// <summary>Hand-editable workflow definition files (JSON, ADR-008).</summary>
-    string WorkflowsDirectory { get; }
-
-    /// <summary>Profile definitions (work / personal) with their policies.</summary>
+    /// <summary>Parent of the per-profile folders: <c>&lt;DataRoot&gt;\profiles</c>.</summary>
     string ProfilesDirectory { get; }
 
-    /// <summary>Rolling text logs.</summary>
+    /// <summary>Rolling text logs: <c>&lt;DataRoot&gt;\logs</c>.</summary>
     string LogsDirectory { get; }
+
+    /// <summary>A profile's own folder: <c>&lt;DataRoot&gt;\profiles\&lt;Work|Personal&gt;</c>.</summary>
+    string GetProfileDirectory(ProfileId profile);
+
+    /// <summary>A profile's hand-editable workflow files (JSON, ADR-008): <c>&lt;DataRoot&gt;\profiles\&lt;Work|Personal&gt;\workflows</c>.</summary>
+    string GetProfileWorkflowsDirectory(ProfileId profile);
 }

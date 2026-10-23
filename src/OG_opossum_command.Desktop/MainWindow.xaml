@@ -1,14 +1,74 @@
 ﻿<Window x:Class="OG_opossum_command.Desktop.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:OG_opossum_command.Desktop.Shell"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=shell:ShellViewModel}"
         Title="OG Opossum Command Central"
-        Height="450" Width="800"
-        MinHeight="300" MinWidth="480"
-        WindowStartupLocation="CenterScreen">
-    <Grid>
-        <TextBlock Text="OG Opossum Command Central"
-                   FontSize="20"
-                   HorizontalAlignment="Center"
-                   VerticalAlignment="Center" />
+        Height="560" Width="860"
+        MinHeight="420" MinWidth="600"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
+        Foreground="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}"
+        KeyboardNavigation.TabNavigation="Cycle"
+        AutomationProperties.Name="OG Opossum Command Central">
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Header: title, profile switch, host status -->
+        <Grid Grid.Row="0" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0"
+                       Text="OG Opossum Command Central"
+                       FontSize="20" FontWeight="Bold"
+                       VerticalAlignment="Center" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0">
+                <Label Content="_Profile:" Target="{Binding ElementName=ProfilePicker}" VerticalAlignment="Center" />
+                <ComboBox x:Name="ProfilePicker"
+                          MinWidth="120"
+                          ItemsSource="{Binding Profiles}"
+                          SelectedItem="{Binding ActiveProfile, Mode=TwoWay}"
+                          FocusVisualStyle="{StaticResource OgocFocusVisual}"
+                          AutomationProperties.Name="Active profile" />
+            </StackPanel>
+            <TextBlock Grid.Column="2"
+                       Text="{Binding HostStatus}"
+                       VerticalAlignment="Center"
+                       FontWeight="SemiBold"
+                       AutomationProperties.LiveSetting="Polite" />
+        </Grid>
+
+        <!-- Dashboard or History -->
+        <ContentControl Grid.Row="1"
+                        Content="{Binding CurrentView}"
+                        Focusable="False" />
+
+        <!-- Footer navigation -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <Button Content="_Dashboard"
+                    Style="{StaticResource OgocButton}"
+                    Command="{Binding ShowDashboardCommand}"
+                    Margin="0,0,8,0"
+                    AutomationProperties.Name="Show dashboard" />
+            <Button Content="_History"
+                    Style="{StaticResource OgocButton}"
+                    Command="{Binding ShowHistoryCommand}"
+                    Margin="0,0,8,0"
+                    AutomationProperties.Name="Show history" />
+            <Button Content="Hide to _tray"
+                    Style="{StaticResource OgocButton}"
+                    Command="{Binding HideCommand}"
+                    AutomationProperties.Name="Hide window to tray" />
+        </StackPanel>
     </Grid>
 </Window>

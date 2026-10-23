@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "plan-tomorrow",
+  "name": "Plan Tomorrow",
+  "description": "EXAMPLE - edit me. Opens your personal calendar on the web and a notes file in Notepad for tomorrow. Swap the calendar URL for the one you actually use.",
+  "profileId": "personal",
+  "trigger": { "type": "manual" },
+  "execution": { "maxParallelSteps": 1, "onDuplicate": "focus-existing" },
+  "steps": [
+    {
+      "id": "calendar",
+      "name": "Open calendar (web)",
+      "action": "windows.url.open",
+      "inputs": { "url": "https://calendar.google.com/" },
+      "timeoutSeconds": 15
+    },
+    {
+      "id": "notes",
+      "name": "Open tomorrow notes in Notepad",
+      "action": "windows.process.launch",
+      "inputs": {
+        "path": "%SystemRoot%\\System32\\notepad.exe",
+        "arguments": ["%USERPROFILE%\\Documents\\tomorrow.txt"],
+        "waitForExit": false
+      },
+      "dependsOn": ["calendar"]
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 using OG_opossum_command.Core.Paths;
+using OG_opossum_command.Core.Profiles;
 
 namespace OG_opossum_command.Core.Tests.Paths;
 
@@ -58,14 +59,38 @@ public sealed class AppPathsTests
     }
 
     [Fact]
+    public void ForRoot_rejects_relative_paths()
+    {
+        Assert.Throws<InvalidOperationException>(() => AppPaths.ForRoot(@"relative\root"));
+    }
+
+    [Fact]
     public void Every_child_path_lives_under_the_data_root()
     {
         var paths = AppPaths.Resolve(Env(@"D:\scratch\ogoc-data"), LocalAppData);
 
-        var children = new[] { paths.DatabasePath, paths.WorkflowsDirectory, paths.ProfilesDirectory, paths.LogsDirectory };
+        var children = new[]
+        {
+            paths.DatabasePath,
+            paths.ProfilesDirectory,
+            paths.LogsDirectory,
+            paths.GetProfileDirectory(ProfileId.Work),
+            paths.GetProfileDirectory(ProfileId.Personal),
+            paths.GetProfileWorkflowsDirectory(ProfileId.Work),
+            paths.GetProfileWorkflowsDirectory(ProfileId.Personal),
+        };
         Assert.All(children, child => Assert.StartsWith(paths.DataRoot + Path.DirectorySeparatorChar, child, StringComparison.Ordinal));
         Assert.Equal(children.Length, children.Distinct(StringComparer.OrdinalIgnoreCase).Count());
-        Assert.Equal(Path.Combine(paths.DataRoot, "OG_opossum_command.db"), paths.DatabasePath);
+        Assert.Equal(Path.Combine(paths.DataRoot, "data.db"), paths.DatabasePath);
+    }
+
+    [Fact]
+    public void Profile_workflow_folders_follow_the_spec_layout()
+    {
+        var paths = AppPaths.ForRoot(@"D:\scratch\ogoc-data");
+
+        Assert.Equal(@"D:\scratch\ogoc-data\profiles\Work\workflows", paths.GetProfileWorkflowsDirectory(ProfileId.Work));
+        Assert.Equal(@"D:\scratch\ogoc-data\profiles\Personal\workflows", paths.GetProfileWorkflowsDirectory(ProfileId.Personal));
     }
 
     [Fact]

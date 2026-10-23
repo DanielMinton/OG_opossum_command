@@ -1,14 +1,19 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Core: workflows, engine, actions, scheduling, history, profiles, paths.
+    Core: workflows, engine, actions, history, profiles, seeding, paths.
     Plain net10.0 with no UI or WPF references so it stays unit-testable headlessly.
     Shared settings (nullable, warnings-as-errors, analyzers, version) come from Directory.Build.props.
+    Exact package versions are pinned (ADR-017 style).
   -->
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>OG_opossum_command.Core</RootNamespace>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.13" />
+  </ItemGroup>
 
 </Project>

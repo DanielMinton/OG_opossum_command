@@ -11,8 +11,13 @@ is superseded). Decisions: [docs/DECISIONS.md](docs/DECISIONS.md).
 
 ## Status
 
-Phase 2 (scaffold). The solution builds and tests pass, the exe starts, and the data-folder
-resolution is in place. No workflow features yet.
+Phase 3 (core loop). Workflows are JSON files per profile (schema v1, see
+[docs/WORKFLOW-SCHEMA.md](docs/WORKFLOW-SCHEMA.md)); three actions (open a web page, open a folder,
+launch a program with an argument array); an engine with execution IDs, dependencies, bounded
+parallelism, timeouts, and cancellation that kills launched process trees; SQLite history; Work and
+Personal profiles with action allowlists; a tray app with a six-tile dashboard, live progress, Cancel,
+recent runs, and a History view. Closing the window hides it to the tray; Quit is in the tray menu.
+Starting the exe a second time just brings the existing window forward.
 
 ## Layout
 
@@ -45,14 +50,18 @@ Run the app during development:
 dotnet run --project src/OG_opossum_command.Desktop
 ```
 
-Headless self-check (no window; prints `SMOKE OK` and exits 0 when the data folder resolves):
+Self-checks (no window is ever shown, nothing real is opened, the real data folder is never touched;
+both exit on their own within 30 s):
 
 ```bash
-src/OG_opossum_command.Desktop/bin/Debug/net10.0-windows/OG_opossum_command.exe --smoke-test
+exe=src/OG_opossum_command.Desktop/bin/Debug/net10.0-windows/OG_opossum_command.exe
+"$exe" --smoke-test   # paths, DB migration, profiles, example workflows, one engine run with fakes → SMOKE OK
+"$exe" --smoke-ui     # real App start-up, off-screen window, dashboard bound, tray icon created/disposed → SMOKE-UI OK
 ```
 
 The exe is a windowed program, so its output only shows when the caller captures it, for
-example `out=$(... --smoke-test)`. The exit code is the contract.
+example `out=$(... --smoke-test)`. The exit code is the contract. Without `OGOC_DATA_DIR` the smoke
+modes use a throwaway folder under `%TEMP%`.
 
 ## Where data lives
 
@@ -63,9 +72,19 @@ Every per-user path is derived from one data root by the `AppPaths` service in C
 | Normal use | `%LOCALAPPDATA%\OG_opossum_command` |
 | `OGOC_DATA_DIR` set (tests, build script, experiments) | that folder; it must be an absolute path |
 
-Under the root: `OG_opossum_command.db` (runs, history, settings), `workflows\`, `profiles\`,
-`logs\`. The app never reads or writes relative to the current directory, never touches the
-registry, and never writes outside the data root.
+Under the root:
+
+| Path | What |
+|---|---|
+| `data.db` (+ `-wal`, `-shm`) | SQLite: profiles, workflow versions, executions, step states, redacted events, settings, schema migrations. |
+| `profiles\Work\workflows\*.json` | The Work profile's workflows. Edit these; on first run the examples are copied here. |
+| `profiles\Personal\workflows\*.json` | Same for Personal. A file's `profileId` must match its folder. |
+| `profiles\<Work|Personal>\profile.json` | Optional allowlist of action IDs for that profile. |
+| `logs\crash.log` | Written only if the app fails to start or hits an unhandled error. |
+
+The app never reads or writes relative to the current directory, never touches the registry, and
+never writes outside the data root. Example workflows live in `examples/workflows/` in the repo and
+next to the exe; they are clearly marked `EXAMPLE - edit me`.
 
 ## The build script
 

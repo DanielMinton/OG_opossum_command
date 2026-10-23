@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "focus-mode",
+  "name": "Focus Mode",
+  "description": "EXAMPLE - edit me. Opens Microsoft To Do on the web and a scratch notes file in Notepad so you can park distractions. Point the notes file wherever you like.",
+  "profileId": "work",
+  "trigger": { "type": "manual" },
+  "execution": { "maxParallelSteps": 1, "onDuplicate": "focus-existing" },
+  "steps": [
+    {
+      "id": "todo",
+      "name": "Open To Do (web)",
+      "action": "windows.url.open",
+      "inputs": { "url": "https://to-do.office.com/tasks/" },
+      "timeoutSeconds": 15
+    },
+    {
+      "id": "notes",
+      "name": "Open focus notes in Notepad",
+      "action": "windows.process.launch",
+      "inputs": {
+        "path": "%SystemRoot%\\System32\\notepad.exe",
+        "arguments": ["%USERPROFILE%\\Documents\\focus-notes.txt"],
+        "waitForExit": false
+      },
+      "dependsOn": ["todo"]
+    }
+  ]
+}

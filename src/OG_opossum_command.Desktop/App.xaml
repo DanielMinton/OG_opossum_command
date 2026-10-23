@@ -1,8 +1,73 @@
 ﻿<Application x:Class="OG_opossum_command.Desktop.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             ShutdownMode="OnMainWindowClose">
+             xmlns:dashboard="clr-namespace:OG_opossum_command.Desktop.Dashboard"
+             xmlns:history="clr-namespace:OG_opossum_command.Desktop.History"
+             ShutdownMode="OnExplicitShutdown">
     <!-- No StartupUri: Program.Main decides whether a window is shown at all. -->
     <Application.Resources>
+
+        <!-- Colours come from SystemColors so Windows high-contrast themes apply automatically. -->
+        <Style x:Key="OgocFocusVisual">
+            <Setter Property="Control.Template">
+                <Setter.Value>
+                    <ControlTemplate>
+                        <Rectangle Margin="-3"
+                                   StrokeThickness="3"
+                                   Stroke="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}"
+                                   SnapsToDevicePixels="True" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="OgocButton" TargetType="Button">
+            <Setter Property="FocusVisualStyle" Value="{StaticResource OgocFocusVisual}" />
+            <Setter Property="Padding" Value="14,8" />
+            <Setter Property="MinHeight" Value="36" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}" />
+            <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}" />
+        </Style>
+
+        <Style x:Key="OgocTile" TargetType="Button" BasedOn="{StaticResource OgocButton}">
+            <Setter Property="MinHeight" Value="84" />
+            <Setter Property="Margin" Value="6" />
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+
+        <Style x:Key="OgocCancel" TargetType="Button" BasedOn="{StaticResource OgocButton}">
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="MinWidth" Value="120" />
+            <Setter Property="MinHeight" Value="44" />
+            <Setter Property="BorderThickness" Value="2" />
+        </Style>
+
+        <Style x:Key="OgocHeading" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Margin" Value="0,0,0,6" />
+            <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}" />
+        </Style>
+
+        <Style x:Key="OgocList" TargetType="ListView">
+            <Setter Property="FocusVisualStyle" Value="{StaticResource OgocFocusVisual}" />
+            <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.WindowBrushKey}}" />
+            <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}" />
+        </Style>
+
+        <DataTemplate DataType="{x:Type dashboard:DashboardViewModel}">
+            <dashboard:DashboardView />
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type history:HistoryViewModel}">
+            <history:HistoryView />
+        </DataTemplate>
+
     </Application.Resources>
 </Application>

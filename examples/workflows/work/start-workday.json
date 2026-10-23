@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "start-workday",
+  "name": "Start Workday",
+  "description": "EXAMPLE - edit me. Opens Outlook on the web and Teams on the web side by side, then shows your Documents folder. Change the URLs and the folder to match your day.",
+  "profileId": "work",
+  "trigger": { "type": "manual" },
+  "execution": { "maxParallelSteps": 2, "onDuplicate": "focus-existing" },
+  "steps": [
+    {
+      "id": "outlook",
+      "name": "Open Outlook (web)",
+      "action": "windows.url.open",
+      "inputs": { "url": "https://outlook.office.com/mail/" },
+      "timeoutSeconds": 15
+    },
+    {
+      "id": "teams",
+      "name": "Open Teams (web)",
+      "action": "windows.url.open",
+      "inputs": { "url": "https://teams.microsoft.com/" },
+      "timeoutSeconds": 15
+    },
+    {
+      "id": "documents",
+      "name": "Open Documents folder",
+      "action": "windows.folder.open",
+      "inputs": { "path": "%USERPROFILE%\\Documents" },
+      "dependsOn": ["outlook", "teams"],
+      "onFailure": "continue"
+    }
+  ]
+}
