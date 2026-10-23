@@ -118,8 +118,8 @@
                             Padding="10,2"
                             MinHeight="28"
                             Command="{Binding RefreshCalendarCommand}"
-                            AutomationProperties.Name="Refresh today's calendar"
-                            AutomationProperties.HelpText="Reads the calendar file again" />
+                            AutomationProperties.Name="Refresh today's calendar and carryovers"
+                            AutomationProperties.HelpText="Reads the calendar file and the carryovers file again" />
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Style="{StaticResource OgocHeading}" Margin="0" Text="TODAY" />
                         <TextBlock Text="{Binding TodayStatus}"
@@ -162,6 +162,37 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
+
+                <!-- Carryovers from yesterday: tomorrow.json written by the user's own flow (ADR-051). Text only; nothing is opened. -->
+                <TextBlock Style="{StaticResource OgocHeading}"
+                           Margin="0,10,0,0"
+                           Text="CARRYOVERS FROM YESTERDAY"
+                           AutomationProperties.HeadingLevel="Level3" />
+                <TextBlock Text="{Binding CarryoverNote}"
+                           TextWrapping="Wrap"
+                           FontSize="{DynamicResource OgocSmallSize}"
+                           Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                           a11y:LiveRegion.Announce="True" />
+                <ListBox ItemsSource="{Binding Carryovers}"
+                         Margin="0,4,0,0"
+                         BorderThickness="0"
+                         FocusVisualStyle="{StaticResource OgocFocusVisual}"
+                         Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
+                         Foreground="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                         ScrollViewer.CanContentScroll="False"
+                         Visibility="{Binding HasCarryovers, Converter={StaticResource BoolToVis}}"
+                         AutomationProperties.Name="Carryovers from yesterday">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate DataType="{x:Type local:CarryoverRow}">
+                            <TextBlock TextWrapping="Wrap" FontSize="{DynamicResource OgocBodySize}">
+                                <Run Text="{Binding Title, Mode=OneWay}" />
+                                <Run Text="{Binding Detail, Mode=OneWay}" FontSize="{DynamicResource OgocSmallSize}" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                            </TextBlock>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
             </StackPanel>
         </Border>
 

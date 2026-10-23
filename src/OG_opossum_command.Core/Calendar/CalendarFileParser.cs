@@ -1,6 +1,4 @@
-using System.Globalization;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using OG_opossum_command.Core.Workflows;
 
 namespace OG_opossum_command.Core.Calendar;
@@ -19,7 +17,7 @@ public sealed record CalendarParseResult(CalendarSnapshot? Snapshot, IReadOnlyLi
 /// Unknown properties, wrong types, a wrong <c>schemaVersion</c>, and timestamps without an offset are errors;
 /// optional text fields tolerate <c>null</c> and <c>""</c> because the flow emits those for empty values.
 /// </summary>
-public static partial class CalendarFileParser
+public static class CalendarFileParser
 {
     /// <summary>The only <c>schemaVersion</c> this build reads.</summary>
     public const int SchemaVersion = 1;
@@ -174,25 +172,17 @@ public static partial class CalendarFileParser
         }
 
         text = text.Trim();
-        if (TimestampPattern().IsMatch(text)
-            && DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.None, out var value))
+        if (StrictJsonValues.TryParseOffsetTimestamp(text, out var value))
         {
             return value;
         }
 
-        if (allowDateOnly && DatePattern().IsMatch(text)
-            && DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var date))
+        if (allowDateOnly && StrictJsonValues.TryParseDate(text, out var date))
         {
-            return date;
+            return new DateTimeOffset(date.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
         }
 
         reader.AddError(name, $"'{name}' must be an ISO 8601 timestamp with an offset, such as \"2026-10-22T16:00:00Z\" or \"2026-10-22T09:00:00-07:00\" (got '{text}'). In the flow, pick the start/end field whose sample ends in Z or +hh:mm; see docs/POWER_AUTOMATE_FLOW.md.");
         return null;
     }
-
-    [GeneratedRegex(@"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,7})?)?(Z|[+-]\d{2}:\d{2})$")]
-    private static partial Regex TimestampPattern();
-
-    [GeneratedRegex(@"^\d{4}-\d{2}-\d{2}$")]
-    private static partial Regex DatePattern();
 }

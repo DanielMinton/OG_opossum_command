@@ -36,6 +36,15 @@ public sealed class AppPaths : IAppPaths
     /// <summary>File name the Power Automate flow writes under <c>&lt;OneDrive&gt;\OG_opossum_command</c> (ADR-011).</summary>
     public const string CalendarFileName = "calendar.json";
 
+    /// <summary>File name of the status export the app writes into the profile's exports folder (ADR-050).</summary>
+    public const string StatusFileName = "status.json";
+
+    /// <summary>File name of the carryovers file the Power Automate flow writes into the profile's exports folder (ADR-051).</summary>
+    public const string CarryoversFileName = "tomorrow.json";
+
+    /// <summary>Subfolder of the exports folder that holds alert files for the flow (ADR-052).</summary>
+    public const string OutboxFolderName = "outbox";
+
     private AppPaths(string dataRoot, bool isOverridden, string? oneDriveCommercialRoot, string? oneDriveConsumerRoot)
     {
         DataRoot = dataRoot;
@@ -79,8 +88,12 @@ public sealed class AppPaths : IAppPaths
 
     /// <inheritdoc />
     public string? GetDefaultCalendarFile(ProfileId profile) =>
+        GetDefaultExportsFolder(profile) is { } folder ? Path.Combine(folder, CalendarFileName) : null;
+
+    /// <inheritdoc />
+    public string? GetDefaultExportsFolder(ProfileId profile) =>
         profile == ProfileId.Work && OneDriveCommercialRoot is not null
-            ? Path.Combine(OneDriveCommercialRoot, DefaultFolderName, CalendarFileName)
+            ? Path.Combine(OneDriveCommercialRoot, DefaultFolderName)
             : null;
 
     /// <summary>Resolves paths from the real process environment.</summary>

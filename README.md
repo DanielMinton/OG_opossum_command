@@ -11,7 +11,7 @@ is superseded). Decisions: [docs/DECISIONS.md](docs/DECISIONS.md).
 
 ## Status
 
-Version 0.1.0, Phase 6 (hardening) done: see [CHANGELOG.md](CHANGELOG.md) and the acceptance matrix
+Version 0.2.0, Phases 8-9 (exports and alerts) done: see [CHANGELOG.md](CHANGELOG.md) and the acceptance matrix
 in [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md), which also lists the few checks only you can do on
 this PC (keyboard, Narrator, high contrast, text size, offline). Workflows are JSON files per profile (schema v1 and
 v2, see [docs/WORKFLOW-SCHEMA.md](docs/WORKFLOW-SCHEMA.md)); six actions (open a web page, open a
@@ -39,6 +39,22 @@ by step in [docs/POWER_AUTOMATE_FLOW.md](docs/POWER_AUTOMATE_FLOW.md)). The app 
 file: no sign-in, no app registration, no network. Without the flow the panel just says the calendar
 isn't configured or is unavailable. The Personal profile can't read the work calendar.
 
+Exports and alerts (0.2.0): the same work OneDrive folder, `%OneDriveCommercial%\OG_opossum_command\`,
+is how the app talks to your other flows, still without any network call:
+
+- **status.json:** a scrubbed summary (needs attention, failures in the last 24 h, completed today,
+  running, still scheduled today), written every 15 minutes, soon after a run ends, and on Quit.
+  Your Morning Briefing flow reads it.
+- **Alert outbox:** one small file in `outbox\` when a run fails, needs attention, or overruns.
+  Your alerts flow posts it to Teams and deletes it. This replaces an HTTP webhook, which the
+  no-network rule forbids.
+- **Carryovers from yesterday:** the Today panel lists what your 4:30 pm flow wrote to
+  `tomorrow.json`, on the day it's meant for.
+
+The Work profile has these on by default; the Personal profile has them off. Turn them on or off
+per profile with `exports` in `profile.json` ([docs/WORKFLOW-SCHEMA.md](docs/WORKFLOW-SCHEMA.md)).
+Settings → **Exports** shows what was last written and why something isn't.
+
 ## Layout
 
 | Path | What |
@@ -48,7 +64,7 @@ isn't configured or is unavailable. The Personal profile can't read the work cal
 | `tests/OG_opossum_command.Core.Tests` | xUnit tests for Core. |
 | `examples/workflows/{work,personal}` | Example workflow files per profile. None is scheduled. |
 | `examples/scripts/personal` | Example trusted script (`hello.cmd`) seeded into the Personal profile's `scripts` folder. |
-| `docs/` | Architecture, decisions, feasibility report, workflow schema, Power Automate calendar flow (for you to build), acceptance matrix. |
+| `docs/` | Architecture, decisions, feasibility report, workflow schema, Power Automate flows (calendar, morning briefing, alerts, carryovers; for you to build), acceptance matrix. |
 | `tests/fixtures` | Shared test fixtures (`calendar.sample.json`, also the sample in the flow guide). |
 | `spikes/feasibility` | Throwaway Phase 1 spike, not in the solution. |
 
@@ -103,12 +119,18 @@ Under the root:
 | `profiles\Work\workflows\*.json` | The Work profile's workflows. Edit these; on first run the examples are copied here. |
 | `profiles\Personal\workflows\*.json` | Same for Personal. A file's `profileId` must match its folder. |
 | `profiles\<Work|Personal>\scripts\` | The only place `windows.script.run` reads scripts from. |
-| `profiles\<Work|Personal>\profile.json` | Optional: `allowedActions` (action IDs that profile may run) and `calendarFile` (where its calendar JSON is). |
+| `profiles\<Work|Personal>\profile.json` | Optional: `allowedActions` (action IDs that profile may run), `calendarFile` (where its calendar JSON is), and `exports` (status.json, alert outbox, carryovers). |
 | `logs\crash.log` | Written only if the app fails to start or hits an unhandled error. |
+| `logs\exports.log` | One line each time an export's state changes (written, folder missing, off by policy). |
 
-The app never reads or writes relative to the current directory, never touches the registry, and
-never writes outside the data root. The one thing it reads outside the data root is the Work
-profile's calendar file in your work OneDrive (read-only, never created or downloaded). Example workflows live in `examples/workflows/` in the repo and
+The app never reads or writes relative to the current directory and never touches the registry.
+Outside the data root it uses the profile's exports folder, by default
+`%OneDriveCommercial%\OG_opossum_command` for Work and none for Personal, and the profile's
+`calendarFile` (by default `calendar.json` in that same folder; `profile.json` can point it
+elsewhere). It reads `calendar.json` and `tomorrow.json` (never created, never downloaded) and writes
+only `status.json`, `outbox\*.json`, and short-lived `.ogoc-tmp` files beside them. It creates only
+the `OG_opossum_command` folder (when its parent exists) and its `outbox\` subfolder, never a
+OneDrive root. Example workflows live in `examples/workflows/` in the repo and
 next to the exe; they are clearly marked `EXAMPLE - edit me`.
 
 ## The build script

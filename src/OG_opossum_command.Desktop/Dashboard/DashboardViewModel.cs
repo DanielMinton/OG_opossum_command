@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using OG_opossum_command.Core.Calendar;
 using OG_opossum_command.Core.Engine;
+using OG_opossum_command.Core.Exports;
 using OG_opossum_command.Core.Hosting;
 using OG_opossum_command.Core.Profiles;
 using OG_opossum_command.Core.Workflows;
@@ -48,6 +49,19 @@ public sealed partial class DashboardViewModel : ObservableObject
 
     [ObservableProperty]
     public partial bool HasTodayEvents { get; set; }
+
+    /// <summary>
+    /// "Carryovers from yesterday": today's items from the profile's <c>tomorrow.json</c> (ADR-051), read on load and on
+    /// Refresh. Display only: nothing in an item is opened or followed.
+    /// </summary>
+    public ObservableCollection<CarryoverRow> Carryovers { get; } = [];
+
+    /// <summary>One line under the Carryovers heading: how many items, or a gentle note why there are none.</summary>
+    [ObservableProperty]
+    public partial string CarryoverNote { get; set; } = "Carryovers not read yet.";
+
+    [ObservableProperty]
+    public partial bool HasCarryovers { get; set; }
 
     /// <summary>Exactly <see cref="TileCount"/> tiles for the active profile.</summary>
     public ObservableCollection<WorkflowTile> Tiles { get; } = [];
@@ -140,6 +154,11 @@ public sealed partial class DashboardViewModel : ObservableObject
         {
             _ = RefreshCalendarAsync();
         }
+        else
+        {
+            // The calendar was already read for this profile; carryovers are re-read on every load (forDate may have moved on).
+            _ = RefreshCarryoversAsync();
+        }
 
         if (!_firstBind.Task.IsCompleted)
         {
@@ -182,14 +201,16 @@ public sealed partial class DashboardViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Re-reads the active profile's calendar file off the dispatcher. The result arrives through
-    /// <see cref="CalendarService.Changed"/>; a bad or missing file only changes the status line, never throws.
+    /// Re-reads the active profile's calendar file and carryovers file off the dispatcher (the Today panel's Refresh).
+    /// The calendar result arrives through <see cref="CalendarService.Changed"/>; a bad or missing file only changes a
+    /// status line, never throws.
     /// </summary>
     [RelayCommand]
     private async Task RefreshCalendarAsync()
     {
         var profile = _host.Profiles.Get(_profile);
         TodayStatus = "Reading calendar…";
+        var carryovers = RefreshCarryoversAsync();
         try
         {
             await Task.Run(() => _host.Calendar.ReadAsync(profile)).ConfigureAwait(true);
@@ -198,6 +219,45 @@ public sealed partial class DashboardViewModel : ObservableObject
         {
             // Shutting down.
         }
+
+        await carryovers.ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Reads the active profile's <c>tomorrow.json</c> on the thread pool and shows the result. The reader is tolerant
+    /// (missing file = none, bad file = a readable note), so this never throws into the UI.
+    /// </summary>
+    public async Task RefreshCarryoversAsync()
+    {
+        var profile = _profile;
+        CarryoverNote = "Reading carryovers…";
+        try
+        {
+            var result = await _host.Exports.Carryovers.ReadAsync(_host.Exports.GetProfile(profile)).ConfigureAwait(true);
+            if (profile == _profile)
+            {
+                ApplyCarryovers(result);
+            }
+        }
+        catch (ObjectDisposedException)
+        {
+            // Shutting down.
+        }
+    }
+
+    private void ApplyCarryovers(CarryoverReadResult result)
+    {
+        Carryovers.Clear();
+        if (result.Status == CarryoverStatus.Loaded)
+        {
+            foreach (var item in result.Items)
+            {
+                Carryovers.Add(CarryoverRow.From(item));
+            }
+        }
+
+        HasCarryovers = Carryovers.Count > 0;
+        CarryoverNote = result.Message;
     }
 
     /// <summary>Opens an event's https link (Teams join or Outlook page) through the injectable opener, so smoke runs only record it.</summary>
@@ -485,6 +545,30 @@ public sealed record TodayEvent(string Time, string Subject, string Detail, Uri?
             ? string.Join(" · ", new[] { item.Location, item.ShowAs }.Where(s => !string.IsNullOrEmpty(s)))
             : item.Location ?? string.Empty;
         return new TodayEvent(time, item.Subject, detail, item.Link, item.IsInProgressAt(now));
+    }
+}
+
+/// <summary>One "Carryovers from yesterday" row. Text only: the app never opens anything from <c>tomorrow.json</c>.</summary>
+public sealed record CarryoverRow(string Title, string Detail)
+{
+    /// <summary>Screen-reader name.</summary>
+    public string AutomationName => Detail.Length > 0 ? $"{Title}, {Detail}" : Title;
+
+    public override string ToString() => AutomationName;
+
+    public static CarryoverRow From(CarryoverItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        var source = item.Source switch
+        {
+            CarryoverSource.Todo => "To Do",
+            CarryoverSource.Email => "Email",
+            CarryoverSource.Teams => "Teams",
+            _ => null,
+        };
+        var due = item.Due is { } date ? $"due {date.ToString("ddd d MMM", CultureInfo.CurrentCulture)}" : null;
+        var detail = string.Join(" · ", new[] { source, due, item.Note }.Where(s => !string.IsNullOrWhiteSpace(s)));
+        return new CarryoverRow(item.Title, detail);
     }
 }
 

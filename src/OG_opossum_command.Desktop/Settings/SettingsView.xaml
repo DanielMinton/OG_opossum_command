@@ -71,6 +71,26 @@
                 </ListView.View>
             </ListView>
 
+            <!-- Read-only export state (ADR-050..052). Change it in profiles\<Profile>\profile.json ("exports"). -->
+            <TextBlock Style="{StaticResource OgocHeading}"
+                       Text="EXPORTS (status.json, alert outbox, carryovers; set in profile.json)" />
+            <ItemsControl ItemsSource="{Binding Exports}"
+                          Margin="0,0,0,12"
+                          Focusable="False"
+                          AutomationProperties.Name="Exports">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type local:ExportsRow}">
+                        <StackPanel Margin="0,0,0,6" AutomationProperties.Name="{Binding AutomationName}">
+                            <TextBlock Text="{Binding Profile}" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding Folder}" TextWrapping="Wrap" FontSize="{DynamicResource OgocSmallSize}" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                            <TextBlock Text="{Binding Status}" TextWrapping="Wrap" FontSize="{DynamicResource OgocSmallSize}" />
+                            <TextBlock Text="{Binding Alerts}" TextWrapping="Wrap" FontSize="{DynamicResource OgocSmallSize}" />
+                            <TextBlock Text="{Binding Carryovers}" TextWrapping="Wrap" FontSize="{DynamicResource OgocSmallSize}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
             <TextBlock Style="{StaticResource OgocHeading}" Text="DATA FOLDER" />
             <TextBox Text="{Binding DataRoot, Mode=OneWay}"
                      IsReadOnly="True"

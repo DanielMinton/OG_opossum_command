@@ -33,7 +33,7 @@ public sealed partial class ShellViewModel : ObservableObject
         Profiles = ProfileIdExtensions.All;
         Dashboard = new DashboardViewModel(host, dispatcher);
         History = new HistoryViewModel(host, dispatcher);
-        Settings = new SettingsViewModel(host, notifications, app.ApplyHotkey);
+        Settings = new SettingsViewModel(host, notifications, app.ApplyHotkey, dispatcher);
         Settings.Changed += RefreshHostStatus;
 
         var saved = host.History.GetSetting(SettingKeys.ActiveProfile);

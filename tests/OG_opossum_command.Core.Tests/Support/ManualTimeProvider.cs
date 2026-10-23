@@ -10,6 +10,11 @@ internal sealed class ManualTimeProvider : TimeProvider
         _now = start;
     }
 
+    /// <summary>Local zone the clock reports; <c>null</c> keeps the machine's (the default).</summary>
+    public TimeZoneInfo? Zone { get; set; }
+
+    public override TimeZoneInfo LocalTimeZone => Zone ?? base.LocalTimeZone;
+
     public override DateTimeOffset GetUtcNow() => _now;
 
     public void Advance(TimeSpan by) => _now += by;

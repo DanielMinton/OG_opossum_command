@@ -38,8 +38,8 @@ public interface IHistoryStore : IDisposable
     /// <summary>Most recent runs, newest first, optionally scoped to one profile.</summary>
     IReadOnlyList<ExecutionSnapshot> GetRecentExecutions(ProfileId? profile, int limit);
 
-    /// <summary>Runs in one status, newest first (used for Needs attention).</summary>
-    IReadOnlyList<ExecutionSnapshot> GetExecutionsByStatus(ExecutionStatus status, int limit);
+    /// <summary>Runs in one status, newest first (used for Needs attention), optionally scoped to one profile.</summary>
+    IReadOnlyList<ExecutionSnapshot> GetExecutionsByStatus(ExecutionStatus status, ProfileId? profile, int limit);
 
     /// <summary>One run with its steps, or <c>null</c>.</summary>
     ExecutionSnapshot? GetExecution(Guid executionId);

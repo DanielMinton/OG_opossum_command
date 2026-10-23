@@ -248,12 +248,14 @@ public partial class App : Application, IDashboardPresenter
             var paletteItems = palette.Results.Items.Count;
             palette.Close();
             Shell.ShowDashboardCommand.Execute(null);
+            await Shell.Dashboard.RefreshCarryoversAsync();
 
             _tray?.Dispose();
             _tray = null;
             Console.WriteLine($"smoke-ui: window loaded, dashboard bound ({Shell.Dashboard.Tiles.Count} tiles), tray icon created and disposed");
             Console.WriteLine($"smoke-ui: today panel bound ({Shell.Dashboard.Today.Count} event(s)): {Shell.Dashboard.TodayStatus}");
-            Console.WriteLine($"smoke-ui: settings view bound ({Shell.Settings.Schedules.Count} schedule(s)), command palette shown off-screen with {paletteItems} item(s) and closed, hotkey not registered");
+            Console.WriteLine($"smoke-ui: today panel carryovers bound ({Shell.Dashboard.Carryovers.Count}): {Shell.Dashboard.CarryoverNote}");
+            Console.WriteLine($"smoke-ui: settings view bound ({Shell.Settings.Schedules.Count} schedule(s), exports for {Shell.Settings.Exports.Count} profile(s)), command palette shown off-screen with {paletteItems} item(s) and closed, hotkey not registered");
             _quitting = true;
             Shutdown(0);
         }

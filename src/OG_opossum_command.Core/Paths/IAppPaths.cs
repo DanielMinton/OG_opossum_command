@@ -25,7 +25,10 @@ public interface IAppPaths
 
     /// <summary>
     /// Root of the signed-in OneDrive for Business folder (<c>%OneDriveCommercial%</c>), or <c>null</c> when none is
-    /// signed in. The app only ever <em>reads</em> one file under it (ADR-039) and never creates anything there.
+    /// signed in. The app never creates this root. It creates only its own <c>OG_opossum_command</c> subfolder (when this
+    /// root exists) and that folder's <c>outbox\</c>; there it reads <c>calendar.json</c> and <c>tomorrow.json</c> and
+    /// writes only <c>status.json</c>, <c>outbox\*.json</c> and short-lived temporary files. A profile's
+    /// <c>calendarFile</c> (from <c>profile.json</c>) may point elsewhere and is only read (ADR-039, ADR-050).
     /// </summary>
     string? OneDriveCommercialRoot { get; }
 
@@ -47,4 +50,12 @@ public interface IAppPaths
     /// signed in); Personal → <c>null</c> (no calendar unless configured).
     /// </summary>
     string? GetDefaultCalendarFile(ProfileId profile);
+
+    /// <summary>
+    /// The profile's OneDrive app folder for exports, alerts, and carryovers unless its <c>profile.json</c> says otherwise
+    /// (ADR-050): Work → <c>&lt;OneDriveCommercial&gt;\OG_opossum_command</c> (the folder that holds the default calendar
+    /// file; <c>null</c> when no work OneDrive is signed in); Personal → <c>null</c> (off unless configured). Pure: nothing is
+    /// checked or created on disk.
+    /// </summary>
+    string? GetDefaultExportsFolder(ProfileId profile);
 }

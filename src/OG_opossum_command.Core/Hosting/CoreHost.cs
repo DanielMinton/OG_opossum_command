@@ -2,6 +2,7 @@ using OG_opossum_command.Core.Actions;
 using OG_opossum_command.Core.Actions.Launchers;
 using OG_opossum_command.Core.Calendar;
 using OG_opossum_command.Core.Engine;
+using OG_opossum_command.Core.Exports;
 using OG_opossum_command.Core.History;
 using OG_opossum_command.Core.Paths;
 using OG_opossum_command.Core.Profiles;
@@ -16,7 +17,8 @@ namespace OG_opossum_command.Core.Hosting;
 /// <param name="Engine">Engine limits.</param>
 /// <param name="StartSchedulerLoop">Run the scheduler's background loop. Tests turn this off and call <see cref="Scheduler.Tick"/> themselves.</param>
 /// <param name="ReviewInterruptedRuns">Run the recovery review at startup. Always on in the app; tests may disable it to inspect raw Interrupted rows.</param>
-public sealed record CoreHostOptions(EngineOptions? Engine = null, bool StartSchedulerLoop = true, bool ReviewInterruptedRuns = true);
+/// <param name="StartExportsLoop">Run the exports loop (status.json timer, overrun checks; ADR-050..052). Tests turn this off and call <see cref="ExportsHub.Tick"/> themselves.</param>
+public sealed record CoreHostOptions(EngineOptions? Engine = null, bool StartSchedulerLoop = true, bool ReviewInterruptedRuns = true, bool StartExportsLoop = true);
 
 /// <summary>A workflow found by <see cref="CoreHost.Search"/>, with the profile it runs under.</summary>
 public sealed record WorkflowMatch(WorkflowDefinition Workflow, Profile Profile, int Rank);
@@ -33,6 +35,7 @@ public sealed class CoreHost : IDisposable
     private readonly Lock _gate = new();
     private readonly TimeProvider _time;
     private bool _disposed;
+    private bool _opened;
 
     private CoreHost(IAppPaths paths, LauncherSet launchers, ActionRegistry actions, CalendarService calendar, SqliteHistoryStore history, ProfileCatalog profiles, WorkflowEngine engine, TimeProvider time, IReadOnlyList<ProfileSeedingResult> seeding, IReadOnlyList<Guid> interrupted)
     {
@@ -47,6 +50,7 @@ public sealed class CoreHost : IDisposable
         InterruptedOnStartup = interrupted.Count;
         _time = time;
         Scheduler = new Scheduler(history, engine, () => Workflows, time);
+        Exports = new ExportsHub(paths, profiles.Profiles, history, engine, () => Workflows, actions, time);
     }
 
     public IAppPaths Paths { get; }
@@ -66,6 +70,12 @@ public sealed class CoreHost : IDisposable
     public WorkflowEngine Engine { get; }
 
     public Scheduler Scheduler { get; }
+
+    /// <summary>
+    /// The OneDrive file integrations (ADR-050..052): <c>status.json</c>, the alert outbox, and carryovers. Already fed
+    /// the startup recovery decisions; writes a final <c>status.json</c> when the host is disposed after a clean start.
+    /// </summary>
+    public ExportsHub Exports { get; }
 
     /// <summary>What first-run seeding did, per profile.</summary>
     public IReadOnlyList<ProfileSeedingResult> Seeding { get; }
@@ -89,7 +99,7 @@ public sealed class CoreHost : IDisposable
     }
 
     /// <summary>Runs waiting for the operator (Resume / Dismiss), newest first.</summary>
-    public IReadOnlyList<ExecutionSnapshot> NeedsAttention => History.GetExecutionsByStatus(ExecutionStatus.NeedsAttention, 50);
+    public IReadOnlyList<ExecutionSnapshot> NeedsAttention => History.GetExecutionsByStatus(ExecutionStatus.NeedsAttention, null, 50);
 
     /// <summary>Opens Core for <paramref name="paths"/>. Creates the data root if needed.</summary>
     /// <param name="paths">Where everything lives (rule 6).</param>
@@ -142,6 +152,14 @@ public sealed class CoreHost : IDisposable
             {
                 host.Scheduler.Start();
             }
+
+            host.Exports.ObserveRecovery(host.RecoveryDecisions);
+            if (options.StartExportsLoop)
+            {
+                host.Exports.Start();
+            }
+
+            host._opened = true;
 
             return host;
         }
@@ -221,6 +239,16 @@ public sealed class CoreHost : IDisposable
 
         _disposed = true;
         Scheduler.Dispose();
+
+        // Stop the exports loop first so no pass runs during or after the final write, or against a disposed engine or history.
+        Exports.Stop();
+        if (_opened)
+        {
+            // Clean exit (Quit has already let the engine settle): one last status.json so the flow sees the final state.
+            Exports.WriteFinalStatus();
+        }
+
+        Exports.Dispose();
         Engine.Dispose();
         History.Dispose();
     }

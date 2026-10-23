@@ -84,6 +84,8 @@
             <Setter Property="FontWeight" Value="Bold" />
             <Setter Property="Margin" Value="0,0,0,6" />
             <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}" />
+            <!-- Every section heading is reachable with Narrator's H key; a sub-section sets Level3 on itself. -->
+            <Setter Property="AutomationProperties.HeadingLevel" Value="Level2" />
         </Style>
 
         <Style x:Key="OgocList" TargetType="ListView">

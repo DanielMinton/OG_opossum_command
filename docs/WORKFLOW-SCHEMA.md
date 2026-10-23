@@ -259,3 +259,63 @@ Without the file, Work may run every built-in action and Personal every action *
 profile **fails closed**: every built-in local action, but no `m365.*` action (ADR-025 as revised by
 ADR-040). The engine refuses to start any workflow whose steps use an action outside the
 allowlist, even if the definition somehow bypassed the loader.
+
+### `exports` (optional, phase 8-9)
+
+`exports` controls the three OneDrive file integrations (ADR-050 to ADR-053): writing `status.json`,
+writing alert files into `outbox\`, and reading `tomorrow.json` for the Today panel's carryovers.
+The flows that use these files are in `docs/POWER_AUTOMATE_FLOW.md`.
+
+**Work** (`profiles\Work\profile.json`): leave `folder` out, so the default
+`%OneDriveCommercial%\OG_opossum_command` is used, and switch off only what you don't want. For
+example, to keep `status.json` and carryovers but stop alert files:
+
+```json
+{
+  "exports": { "alerts": false }
+}
+```
+
+**Personal only** (`profiles\Personal\profile.json`): Personal is off until you give it its own
+folder in the personal OneDrive:
+
+```json
+{
+  "exports": {
+    "folder": "%OneDriveConsumer%\\OG_opossum_command",
+    "status": true,
+    "alerts": true,
+    "carryovers": true
+  }
+}
+```
+
+**Never copy a `%OneDriveConsumer%` folder into the Work file** (or a `%OneDriveCommercial%` folder
+into the Personal file). That is a cross-OneDrive policy error: the whole `profile.json` becomes
+invalid and the profile fails closed, so Work would lose its `m365.*` actions (the calendar) and all
+exports.
+
+| Member | Type | Rules |
+|---|---|---|
+| `folder` | string | Optional. Full path of the folder holding all three files. `%VAR%` references are allowed and expanded when used. UNC (`\\server\share`) and device paths are refused, because writing there would be network I/O. Work's default is `%OneDriveCommercial%\OG_opossum_command` (the folder `calendar.json` is in). Personal has **no** default, so Personal can only be enabled by setting `folder`. |
+| `status` | boolean | Optional. Write `status.json`. |
+| `alerts` | boolean | Optional. Write alert files into `<folder>\outbox\`. |
+| `carryovers` | boolean | Optional. Read `<folder>\tomorrow.json`. |
+
+Defaults and failure rules:
+
+- **No `exports` object:** Work has all three on when `%OneDriveCommercial%` is set (otherwise
+  off, and Settings says why). Personal has all three off.
+- **A switch left out** defaults to on for Work and off for Personal.
+- **Cross-OneDrive folders are refused in both directions.** A Personal `folder` inside
+  `%OneDriveCommercial%`, or a Work `folder` inside `%OneDriveConsumer%`, is a policy error. That
+  makes the whole `profile.json` invalid, so the profile fails closed: no `m365.*` actions
+  (ADR-040) and no exports. The same check runs again every time a file is read or written.
+- **A Personal `folder` equal to Work's** switches Personal's exports off.
+- **A broken or unreadable `profile.json`** (bad JSON, duplicate key, unknown property, wrong type)
+  switches exports and alerts off for that profile.
+- **Unknown members** of `exports` are errors, as everywhere else in this file.
+- **The app creates only the last folder level** (for example `OG_opossum_command`), and only when
+  its parent already exists, plus its `outbox\` subfolder when the first alert is written. It never
+  creates a OneDrive root. If the folder is missing, nothing is
+  written; the problem is logged once to `logs\exports.log` and shown in Settings → Exports.

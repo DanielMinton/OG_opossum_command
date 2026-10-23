@@ -399,7 +399,7 @@ public sealed class SqliteHistoryStore : IHistoryStore
         }
     }
 
-    public IReadOnlyList<ExecutionSnapshot> GetExecutionsByStatus(ExecutionStatus status, int limit)
+    public IReadOnlyList<ExecutionSnapshot> GetExecutionsByStatus(ExecutionStatus status, ProfileId? profile, int limit)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
         lock (_gate)
@@ -407,9 +407,16 @@ public sealed class SqliteHistoryStore : IHistoryStore
             var executions = new List<ExecutionSnapshot>();
             using (var command = _connection.CreateCommand())
             {
-                command.CommandText = $"SELECT {ExecutionColumns} FROM executions WHERE status = $status ORDER BY queued_at DESC, rowid DESC LIMIT $limit;";
+                command.CommandText = profile is null
+                    ? $"SELECT {ExecutionColumns} FROM executions WHERE status = $status ORDER BY queued_at DESC, rowid DESC LIMIT $limit;"
+                    : $"SELECT {ExecutionColumns} FROM executions WHERE status = $status AND profile_id = $profile ORDER BY queued_at DESC, rowid DESC LIMIT $limit;";
                 command.Parameters.AddWithValue("$status", status.ToString());
                 command.Parameters.AddWithValue("$limit", limit);
+                if (profile is not null)
+                {
+                    command.Parameters.AddWithValue("$profile", profile.Value.ToJsonValue());
+                }
+
                 using var reader = command.ExecuteReader();
                 while (reader.Read())
                 {

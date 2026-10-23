@@ -58,10 +58,6 @@ public sealed class CalendarService
     /// <summary>A file older than this (by its <c>generatedAt</c>) counts as stale unless the step says otherwise.</summary>
     public static readonly TimeSpan DefaultMaxAge = TimeSpan.FromMinutes(60);
 
-    // FILE_ATTRIBUTE_OFFLINE | FILE_ATTRIBUTE_RECALL_ON_OPEN | FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS (winnt.h): the OneDrive
-    // client would fetch the content when such a file is opened. The app must not cause that (rule 3).
-    private const int OnlineOnlyAttributes = 0x1000 | 0x40000 | 0x400000;
-
     private readonly IAppPaths? _paths;
     private readonly TimeProvider _time;
     private readonly Dictionary<ProfileId, CalendarReadResult> _latest = [];
@@ -149,21 +145,13 @@ public sealed class CalendarService
             return null;
         }
 
-        var (forbiddenRoot, owner) = profile.Id == ProfileId.Work
-            ? (_paths.OneDriveConsumerRoot, "personal")
-            : (_paths.OneDriveCommercialRoot, "work");
-        if (forbiddenRoot is null || !IsInside(fullPath, forbiddenRoot))
+        var (forbiddenRoot, owner) = OneDriveBoundary.ForbiddenRoot(profile.Id, _paths);
+        if (forbiddenRoot is null || !OneDriveBoundary.IsInside(fullPath, forbiddenRoot))
         {
             return null;
         }
 
         return $"Refused: the {profile.DisplayName} profile may not read {fullPath}, which is inside the {owner} OneDrive ({forbiddenRoot}). Work and personal calendars never cross (ADR-012).";
-    }
-
-    private static bool IsInside(string fullPath, string root)
-    {
-        var prefix = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root)) + Path.DirectorySeparatorChar;
-        return Path.GetFullPath(fullPath).StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<CalendarReadResult> ReadFileAsync(Profile profile, string path, TimeSpan maxAge, CancellationToken cancellationToken)
@@ -193,7 +181,7 @@ public sealed class CalendarService
                 return (Unavailable($"{path} does not exist yet. Build the flow per docs/POWER_AUTOMATE_FLOW.md, or check that OneDrive is syncing."), true);
             }
 
-            if (((int)File.GetAttributes(path) & OnlineOnlyAttributes) != 0)
+            if (OneDriveBoundary.IsOnlineOnly(File.GetAttributes(path)))
             {
                 return (Unavailable($"{path} is an online-only OneDrive placeholder and the app never downloads files. In OneDrive, right-click the {AppPaths.DefaultFolderName} folder and choose 'Always keep on this device'."), false);
             }

@@ -7,7 +7,7 @@ namespace OG_opossum_command.Core.Profiles;
 /// </summary>
 public sealed class Profile
 {
-    public Profile(ProfileId id, string workflowsDirectory, string scriptsDirectory, IEnumerable<string> allowedActionIds, string? calendarFilePath = null)
+    public Profile(ProfileId id, string workflowsDirectory, string scriptsDirectory, IEnumerable<string> allowedActionIds, string? calendarFilePath = null, ExportSettings? exports = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workflowsDirectory);
         ArgumentException.ThrowIfNullOrWhiteSpace(scriptsDirectory);
@@ -18,7 +18,14 @@ public sealed class Profile
         ScriptsDirectory = scriptsDirectory;
         AllowedActionIds = new HashSet<string>(allowedActionIds, StringComparer.Ordinal);
         CalendarFilePath = string.IsNullOrWhiteSpace(calendarFilePath) ? null : calendarFilePath.Trim();
+        Exports = exports ?? ExportSettings.Off("Exports are not configured for this profile.");
     }
+
+    /// <summary>
+    /// What this profile exports through its OneDrive app folder (ADR-050..052). Off unless the catalog supplied
+    /// settings; the cross-OneDrive guard is applied again whenever the folder is used.
+    /// </summary>
+    public ExportSettings Exports { get; }
 
     /// <summary>Which profile this is.</summary>
     public ProfileId Id { get; }

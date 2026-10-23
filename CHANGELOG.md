@@ -2,6 +2,43 @@
 
 All notable changes to OG Opossum Command Central. Versions follow [SemVer](https://semver.org/).
 
+## 0.2.0 — 2026-10-23
+
+Phases 8-9: exports and alerts through your work OneDrive. Still no network calls, sign-in, or
+listeners. Every integration is a file that OneDrive syncs and your own Power Automate flow reads or
+writes (`docs/POWER_AUTOMATE_FLOW.md`).
+
+### Added
+
+- **status.json** (ADR-050): the Work profile writes a small, scrubbed summary to
+  `%OneDriveCommercial%\OG_opossum_command\status.json`. It covers runs that need attention,
+  failures in the last 24 h, completions today, what is running, and what is still scheduled
+  today. It is written at start, every 15 minutes, within a few seconds of a run ending (at most
+  once every 30 s), and on Quit, always atomically; a write that OneDrive or antivirus blocks is
+  retried 30 s later. It is the input for the Morning Briefing flow.
+- **Alert outbox** (ADR-052, ADR-053): when a Work run fails, needs attention, or overruns its step
+  timeout by 5 minutes, one JSON file is dropped into `OG_opossum_command\outbox\`, for a flow that
+  posts it to Teams. At most one per workflow and event per 30 minutes. If the folder is missing or
+  locked at that moment, the alert is retried every 30 s for up to 30 minutes. The outbox is pruned to 200
+  files and 7 days, touching only the app's own files. Quiet mode doesn't hold alerts back; the
+  flow handles quiet hours. This replaces the planned HTTP `webhook.post`, which the no-network
+  rule forbids.
+- **Carryovers from yesterday** (ADR-051): the Today panel lists up to 10 items from
+  `tomorrow.json`, which your 4:30 pm flow writes. Items show only on the file's `forDate`. The
+  file is parsed strictly as untrusted input and nothing in it is ever opened.
+- **profile.json `exports`** (`folder`, `status`, `alerts`, `carryovers`): Work is on by default,
+  Personal is off. Folders inside the other context's OneDrive are refused in both directions, and
+  a broken `profile.json` turns exports off (fail closed).
+- **Settings → Exports**: read-only state per profile (status.json last written, folder missing,
+  off by policy; last alert; carryovers file). State changes are logged once to `logs\exports.log`.
+- `--smoke-ui` prints `today panel carryovers bound (N)` and the exports row count.
+
+### Changed
+
+- The calendar's default path now comes from the shared exports folder (same location as before).
+  The cross-OneDrive guard is shared code (`OneDriveBoundary`).
+- Version 0.2.0 (`Directory.Build.props`, `app.manifest`).
+
 ## 0.1.0 — 2026-10-23
 
 First usable release, for one person on one Windows PC, as a standard user.
