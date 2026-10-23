@@ -112,6 +112,10 @@ fi
   || die "Git Bash not found. Install Git for Windows, or set CLAUDE_CODE_GIT_BASH_PATH to its bin\\bash.exe."
 export CLAUDE_CODE_GIT_BASH_PATH
 
+# Headless sessions stop background work 10 minutes after their last reply,
+# which cuts off ultracode review workflows. Wait for them instead.
+export CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS="${CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS:-0}"
+
 # ── Arguments ────────────────────────────────────────────────────────────────
 FROM=""; ONLY=""; INTERACTIVE=0; DRY_RUN=0; APPROVE_INSTALL=0; APPROVE_STARTUP=0
 phase_arg() { [[ "${2:-}" =~ ^[0-9]+$ ]] && (( 10#$2 <= LAST_PHASE )) || die "$1 needs a phase number 0-$LAST_PHASE"; echo $((10#$2)); }
