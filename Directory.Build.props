@@ -1,0 +1,26 @@
+<Project>
+
+  <!--
+    Shared build settings for every project under src/ and tests/.
+    Applies to spikes/ too (MSBuild walks up to the repo root); the spike is not in the solution.
+  -->
+
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <Deterministic>true</Deterministic>
+    <LangVersion>latest</LangVersion>
+    <Version>0.1.0</Version>
+    <Company>OG Opossum</Company>
+    <Product>OG Opossum Command Central</Product>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- CA1707 is disabled only inside this file, for the underscore code name (ADR-018). -->
+    <Compile Include="$(MSBuildThisFileDirectory)CodeNameSuppression.cs" Link="CodeNameSuppression.cs" />
+  </ItemGroup>
+
+</Project>

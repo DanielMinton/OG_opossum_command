@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Desktop: the WPF tray application. AssemblyName makes the executable OG_opossum_command.exe
+    (rule 0) while the namespace stays OG_opossum_command.Desktop.
+    Program.Main is the single entry point (StartupObject) so the smoke-test switch is handled before
+    the WPF Application is ever constructed; App.xaml remains the ApplicationDefinition for resources.
+    No RuntimeIdentifier or custom OutputPath here: the build script publishes with -r win-x64 and
+    looks for the Debug exe under bin/Debug.
+  -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>OG_opossum_command</AssemblyName>
+    <RootNamespace>OG_opossum_command.Desktop</RootNamespace>
+    <StartupObject>OG_opossum_command.Desktop.Program</StartupObject>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OG_opossum_command.Core\OG_opossum_command.Core.csproj" />
+  </ItemGroup>
+
+</Project>

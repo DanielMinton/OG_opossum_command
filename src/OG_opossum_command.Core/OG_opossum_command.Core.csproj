@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Core: workflows, engine, actions, scheduling, history, profiles, paths.
+    Plain net10.0 with no UI or WPF references so it stays unit-testable headlessly.
+    Shared settings (nullable, warnings-as-errors, analyzers, version) come from Directory.Build.props.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>OG_opossum_command.Core</RootNamespace>
+  </PropertyGroup>
+
+</Project>

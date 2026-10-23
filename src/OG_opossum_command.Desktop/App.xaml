@@ -1,0 +1,8 @@
+﻿<Application x:Class="OG_opossum_command.Desktop.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             ShutdownMode="OnMainWindowClose">
+    <!-- No StartupUri: Program.Main decides whether a window is shown at all. -->
+    <Application.Resources>
+    </Application.Resources>
+</Application>

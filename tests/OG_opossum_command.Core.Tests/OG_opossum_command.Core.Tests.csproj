@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    xUnit 2 with the VSTest runner (xunit.runner.visualstudio + Microsoft.NET.Test.Sdk), so the
+    hang-timeout flag the gate passes to dotnet test works. Exact versions pinned (ADR-017).
+    Tests never touch the real data root: AppPaths takes an injected environment lookup, and any
+    test that needs a disk folder creates it under %TEMP% and deletes it.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>OG_opossum_command.Core.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\OG_opossum_command.Core\OG_opossum_command.Core.csproj" />
+  </ItemGroup>
+
+</Project>

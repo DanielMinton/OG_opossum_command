@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/OG_opossum_command.Core/OG_opossum_command.Core.csproj" />
+    <Project Path="src/OG_opossum_command.Desktop/OG_opossum_command.Desktop.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/OG_opossum_command.Core.Tests/OG_opossum_command.Core.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,4 @@
+# Applies to test projects only (this file lives under tests/).
+[*.cs]
+# Test method names use underscores for readability (Given_when_then style); CA1707 stays on in src/ (ADR-019).
+dotnet_diagnostic.CA1707.severity = none
