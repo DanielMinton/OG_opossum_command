@@ -22,21 +22,24 @@ public sealed class AtomicFileTests : IDisposable
     private static string TempName(string target) => $".{target}.{Guid.NewGuid():N}{AtomicFile.TempSuffix}";
 
     [Fact]
-    public async Task A_briefly_locked_target_is_replaced_after_a_retry()
+    public void A_briefly_locked_target_is_replaced_after_a_retry()
     {
         var path = Path.Combine(Folder, "status.json");
         File.WriteAllText(path, "old");
 
         // OneDrive or antivirus holds the previous file for a moment.
+        // Released from a dedicated thread, not the thread pool: on a busy CI runner a pool thread can start
+        // later than the whole 400 ms retry budget, and then the test measures thread-pool starvation, not the retry.
         var holder = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None);
-        var release = Task.Run(async () =>
+        var release = new Thread(() =>
         {
-            await Task.Delay(150);
-            await holder.DisposeAsync();
-        });
+            Thread.Sleep(150);
+            holder.Dispose();
+        }) { IsBackground = true };
+        release.Start();
 
         AtomicFile.WriteAllText(path, "new");
-        await release;
+        release.Join();
 
         Assert.Equal("new", File.ReadAllText(path));
         Assert.Equal(["status.json"], Directory.GetFiles(Folder).Select(Path.GetFileName));

@@ -163,7 +163,17 @@ public sealed class WorkflowEngineTests : IDisposable
 
         var pingsBefore = TestSupport.PingPids();
         var started = engine.Start(workflow, profile);
-        var pingPid = await TestSupport.WaitForNewPingAsync(pingsBefore, Timeout);
+        if (!await TestSupport.WaitUntilAsync(() => TestSupport.PingPids().Except(pingsBefore).Any(), Timeout))
+        {
+            // Say what the run actually did, so a failure on a CI runner is diagnosable from the log alone.
+            var snapshot = engine.GetExecution(started.Execution.Id) ?? _history.GetExecution(started.Execution.Id);
+            var steps = snapshot is null
+                ? "no snapshot"
+                : string.Join("; ", snapshot.Steps.Select(s => $"{s.Id}={s.Status} {s.ErrorCode} {s.Message}"));
+            Assert.Fail($"ping never started. Run: {snapshot?.Status} {snapshot?.Error}. Steps: {steps}");
+        }
+
+        var pingPid = await TestSupport.WaitForNewPingAsync(pingsBefore, TimeSpan.FromSeconds(1));
 
         Assert.True(engine.Cancel(started.Execution.Id));
         using var cts = new CancellationTokenSource(Timeout);
