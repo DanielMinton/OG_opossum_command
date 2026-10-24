@@ -5,7 +5,7 @@
 Screens:
   AlertsScreen:
     Properties:
-      Fill: =ColorValue("#f5f5f8")
+      Fill: =ColorValue("#16181D")
       OnVisible: =Refresh('Opossum Alerts')
     Children:
       - alrRoot:
@@ -16,7 +16,7 @@ Screens:
             Y: =0
             Width: =Parent.Width
             Height: =Parent.Height
-            Fill: =ColorValue("#f5f5f8")
+            Fill: =ColorValue("#16181D")
             DropShadow: =DropShadow.None
             LayoutDirection: =LayoutDirection.Vertical
             LayoutAlignItems: =LayoutAlignItems.Stretch
@@ -28,8 +28,8 @@ Screens:
                 Properties:
                   Height: =56
                   FillPortions: =0
-                  Fill: =ColorValue("#ffffff")
-                  BorderColor: =ColorValue("#e2e2ea")
+                  Fill: =ColorValue("#1F2229")
+                  BorderColor: =ColorValue("#2C3039")
                   BorderThickness: =1
                   DropShadow: =DropShadow.None
                   LayoutDirection: =LayoutDirection.Horizontal
@@ -44,7 +44,7 @@ Screens:
                         Text: ="Alerts"
                         Size: =20
                         FontWeight: =FontWeight.Semibold
-                        Color: =ColorValue("#15151c")
+                        Color: =ColorValue("#E8EAF0")
                         FillPortions: =1
                         Height: =40
                   - alrShowOpen:
@@ -52,7 +52,8 @@ Screens:
                       Properties:
                         Text: ="Open"
                         Appearance: =If(locShowAll, ButtonAppearance.Subtle, ButtonAppearance.Secondary)
-                        BasePaletteColor: =ColorValue("#5457c4")
+                        FontWeight: =If(locShowAll, FontWeight.Normal, FontWeight.Semibold)
+                        BasePaletteColor: =ColorValue("#8B7CF6")
                         Width: =72
                         Height: =32
                         OnSelect: |-
@@ -62,7 +63,8 @@ Screens:
                       Properties:
                         Text: ="All"
                         Appearance: =If(locShowAll, ButtonAppearance.Secondary, ButtonAppearance.Subtle)
-                        BasePaletteColor: =ColorValue("#5457c4")
+                        FontWeight: =If(locShowAll, FontWeight.Semibold, FontWeight.Normal)
+                        BasePaletteColor: =ColorValue("#8B7CF6")
                         Width: =56
                         Height: =32
                         OnSelect: |-
@@ -74,8 +76,9 @@ Screens:
                         Icon: ="ArrowClockwise"
                         Layout: =ButtonLayout.IconOnly
                         AccessibleLabel: ="Refresh"
+                        Tooltip: ="Refresh"
                         Appearance: =ButtonAppearance.Subtle
-                        BasePaletteColor: =ColorValue("#5457c4")
+                        BasePaletteColor: =ColorValue("#8B7CF6")
                         Width: =40
                         Height: =40
                         OnSelect: =Refresh('Opossum Alerts')
@@ -85,7 +88,7 @@ Screens:
                   Visible: =CountRows(alrGallery.AllItems) = 0
                   Text: =If(locShowAll, "No alerts in the last 90 days.", "Nothing needs you. Resolved alerts are under All.")
                   Size: =13
-                  Color: =ColorValue("#5d5e6e")
+                  Color: =ColorValue("#A3A9B8")
                   Height: =48
                   FillPortions: =0
                   PaddingLeft: =16
@@ -106,7 +109,7 @@ Screens:
                   TemplateSize: =150
                   TemplatePadding: =8
                   FillPortions: =1
-                  Fill: =ColorValue("#f5f5f8")
+                  Fill: =ColorValue("#16181D")
                   ShowScrollbar: =true
                 Children:
                   - alrCard:
@@ -117,8 +120,8 @@ Screens:
                         Y: =0
                         Width: =Parent.TemplateWidth - 16
                         Height: =Parent.TemplateHeight
-                        Fill: =ColorValue("#ffffff")
-                        BorderColor: =If(ThisItem.State.Value = "New", ColorValue("#c22f48"), ColorValue("#e2e2ea"))
+                        Fill: =ColorValue("#1F2229")
+                        BorderColor: =If(ThisItem.State.Value = "New", ColorValue("#F0787A"), ColorValue("#2C3039"))
                         BorderThickness: =1
                         RadiusTopLeft: =12
                         RadiusTopRight: =12
@@ -134,7 +137,7 @@ Screens:
                                 Switch(ThisItem.Event, "run.failed", "failed", "run.needsAttention", "needs attention", "run.overrun", "ran long", ThisItem.Event)
                               Size: =15
                               FontWeight: =FontWeight.Semibold
-                              Color: =ColorValue("#15151c")
+                              Color: =ColorValue("#E8EAF0")
                               X: =14
                               Y: =10
                               Width: =Parent.Width - 120
@@ -147,9 +150,9 @@ Screens:
                               FontWeight: =FontWeight.Semibold
                               Align: =Align.Center
                               Color: |-
-                                =Switch(ThisItem.State.Value, "New", ColorValue("#c22f48"), "Seen", ColorValue("#a85a00"), ColorValue("#1f7a48"))
+                                =Switch(ThisItem.State.Value, "New", ColorValue("#F0787A"), "Seen", ColorValue("#E5B567"), ColorValue("#6FCF97"))
                               Fill: |-
-                                =Switch(ThisItem.State.Value, "New", ColorValue("#fbe8eb"), "Seen", ColorValue("#fcefdf"), ColorValue("#e4f3ea"))
+                                =Switch(ThisItem.State.Value, "New", ColorValue("#3A2226"), "Seen", ColorValue("#3A3020"), ColorValue("#1E3328"))
                               RadiusTopLeft: =10
                               RadiusTopRight: =10
                               RadiusBottomLeft: =10
@@ -165,7 +168,7 @@ Screens:
                               Size: =13
                               Wrap: =true
                               VerticalAlign: =VerticalAlign.Top
-                              Color: =ColorValue("#15151c")
+                              Color: =ColorValue("#E8EAF0")
                               X: =14
                               Y: =40
                               Width: =Parent.Width - 28
@@ -177,7 +180,7 @@ Screens:
                                 =If(IsBlank(ThisItem.Step), "", "step " & ThisItem.Step & " · ") & Text(ThisItem.At, "ddd h:mm AM/PM") &
                                 If(ThisItem.State.Value = "Resolved" && !IsBlank(ThisItem.'Resolved at'), " · resolved " & Text(ThisItem.'Resolved at', "ddd h:mm AM/PM"), "")
                               Size: =12
-                              Color: =ColorValue("#8a8b9c")
+                              Color: =ColorValue("#5EC4B6")
                               X: =14
                               Y: =82
                               Width: =Parent.Width - 28
@@ -189,7 +192,7 @@ Screens:
                               Text: ="Got it"
                               AccessibleLabel: ="Mark this alert as seen"
                               Appearance: =ButtonAppearance.Primary
-                              BasePaletteColor: =ColorValue("#5457c4")
+                              BasePaletteColor: =ColorValue("#8B7CF6")
                               X: =14
                               Y: =Parent.Height - 44
                               Width: =96
@@ -205,8 +208,8 @@ Screens:
                 Properties:
                   Height: =60
                   FillPortions: =0
-                  Fill: =ColorValue("#ffffff")
-                  BorderColor: =ColorValue("#e2e2ea")
+                  Fill: =ColorValue("#1F2229")
+                  BorderColor: =ColorValue("#2C3039")
                   BorderThickness: =1
                   DropShadow: =DropShadow.None
                   LayoutDirection: =LayoutDirection.Horizontal
@@ -220,7 +223,7 @@ Screens:
                       Properties:
                         Text: ="Now"
                         Appearance: =ButtonAppearance.Subtle
-                        BasePaletteColor: =ColorValue("#5457c4")
+                        BasePaletteColor: =ColorValue("#8B7CF6")
                         FillPortions: =1
                         Height: =40
                         OnSelect: =Navigate(NowScreen)
@@ -230,7 +233,8 @@ Screens:
                         Text: |-
                           =With({n: CountRows(Filter('Opossum Alerts', State.Value = "New"))}, "Alerts" & If(n > 0, " " & n, ""))
                         Appearance: =ButtonAppearance.Primary
-                        BasePaletteColor: =ColorValue("#5457c4")
+                        FontWeight: =FontWeight.Semibold
+                        BasePaletteColor: =ColorValue("#8B7CF6")
                         FillPortions: =1
                         Height: =40
                         OnSelect: =Navigate(AlertsScreen)
@@ -239,7 +243,7 @@ Screens:
                       Properties:
                         Text: ="Asks"
                         Appearance: =ButtonAppearance.Subtle
-                        BasePaletteColor: =ColorValue("#5457c4")
+                        BasePaletteColor: =ColorValue("#8B7CF6")
                         FillPortions: =1
                         Height: =40
                         OnSelect: =Navigate(AsksScreen)
@@ -248,7 +252,7 @@ Screens:
                       Properties:
                         Text: ="Day"
                         Appearance: =ButtonAppearance.Subtle
-                        BasePaletteColor: =ColorValue("#5457c4")
+                        BasePaletteColor: =ColorValue("#8B7CF6")
                         FillPortions: =1
                         Height: =40
                         OnSelect: =Navigate(DayScreen)

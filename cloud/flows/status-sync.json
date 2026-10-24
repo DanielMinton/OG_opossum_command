@@ -36,7 +36,7 @@
     "triggers": {
       "When_status_json_is_modified": {
         "type": "OpenApiConnection",
-        "description": "OneDrive for Business: When a file is modified (properties only), folder __ONEDRIVE_FOLDER__, no subfolders. folderId takes the folder's unique id, not its path: __ONEDRIVE_FOLDER_ID__ is filled at deploy time by re-picking __ONEDRIVE_FOLDER__ (/OG_opossum_command) in the trigger's Folder box after import (the metadata block maps the id to that path). Only status.json starts a run (calendar.json and tomorrow.json live in the same folder).",
+        "description": "OneDrive for Business: file modified in __ONEDRIVE_FOLDER__ (no subfolders). folderId is the folder's id (re-pick the folder after import if blank). Only status.json starts a run; calendar.json and tomorrow.json share the folder.",
         "inputs": {
           "host": {
             "connectionName": "shared_onedriveforbusiness",
@@ -434,7 +434,7 @@
       },
       "Raw_json_for_row": {
         "type": "Compose",
-        "description": "RawJson for the Snapshot row: the whole file, or '' when it is longer than 63,000 characters (a plain multi-line column holds at most 63,999). Never truncated, because a cut-off JSON text would make the next run's json() fail; an empty RawJson makes the next run behave like a first run.",
+        "description": "RawJson for the Snapshot row: the whole file, or '' when longer than 63,000 characters (the column holds 63,999). Never truncated: cut-off JSON would break the next run's json(); an empty value makes the next run act like a first run.",
         "runAfter": {
           "Raw_status_text": [
             "Succeeded"

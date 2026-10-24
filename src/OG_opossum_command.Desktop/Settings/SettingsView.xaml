@@ -133,6 +133,21 @@
                 </StackPanel>
             </Border>
 
+            <!-- Opossum Maid (ADR-058): planning only; applying is the CLI's job. -->
+            <Border Style="{StaticResource OgocCard}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource OgocHeading}" Text="Tidy up" />
+                    <Button Style="{StaticResource OgocAccentButton}"
+                            Command="{Binding TidyUpCommand}"
+                            HorizontalAlignment="Left"
+                            Margin="0,0,0,6"
+                            AutomationProperties.Name="Make a tidy-up plan and open the report">
+                        <AccessText Text="_Make a tidy-up plan" />
+                    </Button>
+                    <TextBlock Text="{Binding TidyStatus}" TextWrapping="Wrap" Style="{StaticResource OgocCaption}" a11y:LiveRegion.Announce="True" />
+                </StackPanel>
+            </Border>
+
             <Border Style="{StaticResource OgocCard}">
                 <StackPanel>
                     <TextBlock Style="{StaticResource OgocHeading}" Text="Data folder" />

@@ -7,7 +7,7 @@
 Screens:
   AsksScreen:
     Properties:
-      Fill: =ColorValue("#f5f5f8")
+      Fill: =ColorValue("#16181D")
       OnVisible: |-
         =Set(gReqListId, LookUp(MicrosoftToDoBusiness.GetAllTodoListsV2(), displayName = "Requests").id);
         If(
@@ -31,7 +31,7 @@ Screens:
             Y: =0
             Width: =Parent.Width
             Height: =Parent.Height
-            Fill: =ColorValue("#f5f5f8")
+            Fill: =ColorValue("#16181D")
             DropShadow: =DropShadow.None
             LayoutDirection: =LayoutDirection.Vertical
             LayoutAlignItems: =LayoutAlignItems.Stretch
@@ -43,8 +43,8 @@ Screens:
                 Properties:
                   Height: =56
                   FillPortions: =0
-                  Fill: =ColorValue("#ffffff")
-                  BorderColor: =ColorValue("#e2e2ea")
+                  Fill: =ColorValue("#1F2229")
+                  BorderColor: =ColorValue("#2C3039")
                   BorderThickness: =1
                   DropShadow: =DropShadow.None
                   LayoutDirection: =LayoutDirection.Horizontal
@@ -59,7 +59,7 @@ Screens:
                         Text: ="Asks"
                         Size: =20
                         FontWeight: =FontWeight.Semibold
-                        Color: =ColorValue("#15151c")
+                        Color: =ColorValue("#E8EAF0")
                         FillPortions: =1
                         Height: =40
                   - askCount:
@@ -68,7 +68,7 @@ Screens:
                         Text: =CountRows(colAsks) & " open"
                         Size: =13
                         Align: =Align.Right
-                        Color: =ColorValue("#5d5e6e")
+                        Color: =ColorValue("#A3A9B8")
                         Width: =90
                         Height: =32
                   - askRefresh:
@@ -78,8 +78,9 @@ Screens:
                         Icon: ="ArrowClockwise"
                         Layout: =ButtonLayout.IconOnly
                         AccessibleLabel: ="Refresh"
+                        Tooltip: ="Refresh"
                         Appearance: =ButtonAppearance.Subtle
-                        BasePaletteColor: =ColorValue("#5457c4")
+                        BasePaletteColor: =ColorValue("#8B7CF6")
                         Width: =40
                         Height: =40
                         OnSelect: |-
@@ -104,7 +105,7 @@ Screens:
                     =If(IsBlank(gReqListId), "No To Do list named Requests yet. The Request Catcher flow fills it.", "Nothing open. Nice.")
                   Size: =13
                   Wrap: =true
-                  Color: =ColorValue("#5d5e6e")
+                  Color: =ColorValue("#A3A9B8")
                   Height: =56
                   FillPortions: =0
                   PaddingLeft: =16
@@ -117,7 +118,7 @@ Screens:
                   TemplateSize: =128
                   TemplatePadding: =8
                   FillPortions: =1
-                  Fill: =ColorValue("#f5f5f8")
+                  Fill: =ColorValue("#16181D")
                   ShowScrollbar: =true
                 Children:
                   - askCard:
@@ -128,8 +129,8 @@ Screens:
                         Y: =0
                         Width: =Parent.TemplateWidth - 16
                         Height: =Parent.TemplateHeight
-                        Fill: =ColorValue("#ffffff")
-                        BorderColor: =ColorValue("#e2e2ea")
+                        Fill: =ColorValue("#1F2229")
+                        BorderColor: =ColorValue("#2C3039")
                         BorderThickness: =1
                         RadiusTopLeft: =12
                         RadiusTopRight: =12
@@ -145,7 +146,7 @@ Screens:
                               FontWeight: =FontWeight.Semibold
                               Wrap: =true
                               VerticalAlign: =VerticalAlign.Top
-                              Color: =ColorValue("#15151c")
+                              Color: =ColorValue("#E8EAF0")
                               X: =14
                               Y: =10
                               Width: =Parent.Width - 120
@@ -164,8 +165,8 @@ Screens:
                               Color: |-
                                 =If(
                                     !IsBlank(ThisItem.dueDateTime.dateTime) && DateValue(Left(Text(ThisItem.dueDateTime.dateTime, "yyyy-mm-dd"), 10)) < Today(),
-                                    ColorValue("#c22f48"),
-                                    ColorValue("#5d5e6e")
+                                    ColorValue("#F0787A"),
+                                    ColorValue("#A3A9B8")
                                 )
                               X: =Parent.Width - 104
                               Y: =10
@@ -178,7 +179,7 @@ Screens:
                               Text: |-
                                 =Switch(ThisItem.status, "waitingOnOthers", "waiting on others", "inProgress", "in progress", "deferred", "deferred", "")
                               Size: =12
-                              Color: =ColorValue("#a85a00")
+                              Color: =ColorValue("#E5B567")
                               X: =14
                               Y: =56
                               Width: =Parent.Width - 28
@@ -189,7 +190,7 @@ Screens:
                               Text: ="Done"
                               AccessibleLabel: ="Mark this ask done in To Do"
                               Appearance: =ButtonAppearance.Primary
-                              BasePaletteColor: =ColorValue("#5457c4")
+                              BasePaletteColor: =ColorValue("#8B7CF6")
                               X: =14
                               Y: =Parent.Height - 44
                               Width: =88
@@ -208,7 +209,7 @@ Screens:
                               Text: ="Open"
                               AccessibleLabel: ="Open the original message"
                               Appearance: =ButtonAppearance.Outline
-                              BasePaletteColor: =ColorValue("#5457c4")
+                              BasePaletteColor: =ColorValue("#8B7CF6")
                               X: =110
                               Y: =Parent.Height - 44
                               Width: =88
@@ -221,8 +222,8 @@ Screens:
                 Properties:
                   Height: =60
                   FillPortions: =0
-                  Fill: =ColorValue("#ffffff")
-                  BorderColor: =ColorValue("#e2e2ea")
+                  Fill: =ColorValue("#1F2229")
+                  BorderColor: =ColorValue("#2C3039")
                   BorderThickness: =1
                   DropShadow: =DropShadow.None
                   LayoutDirection: =LayoutDirection.Horizontal
@@ -236,7 +237,7 @@ Screens:
                       Properties:
                         Text: ="Now"
                         Appearance: =ButtonAppearance.Subtle
-                        BasePaletteColor: =ColorValue("#5457c4")
+                        BasePaletteColor: =ColorValue("#8B7CF6")
                         FillPortions: =1
                         Height: =40
                         OnSelect: =Navigate(NowScreen)
@@ -246,7 +247,7 @@ Screens:
                         Text: |-
                           =With({n: CountRows(Filter('Opossum Alerts', State.Value = "New"))}, "Alerts" & If(n > 0, " " & n, ""))
                         Appearance: =ButtonAppearance.Subtle
-                        BasePaletteColor: =ColorValue("#5457c4")
+                        BasePaletteColor: =ColorValue("#8B7CF6")
                         FillPortions: =1
                         Height: =40
                         OnSelect: =Navigate(AlertsScreen)
@@ -255,7 +256,8 @@ Screens:
                       Properties:
                         Text: ="Asks"
                         Appearance: =ButtonAppearance.Primary
-                        BasePaletteColor: =ColorValue("#5457c4")
+                        FontWeight: =FontWeight.Semibold
+                        BasePaletteColor: =ColorValue("#8B7CF6")
                         FillPortions: =1
                         Height: =40
                         OnSelect: =Navigate(AsksScreen)
@@ -264,7 +266,7 @@ Screens:
                       Properties:
                         Text: ="Day"
                         Appearance: =ButtonAppearance.Subtle
-                        BasePaletteColor: =ColorValue("#5457c4")
+                        BasePaletteColor: =ColorValue("#8B7CF6")
                         FillPortions: =1
                         Height: =40
                         OnSelect: =Navigate(DayScreen)

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Opossum Maid's command line (ADR-058): a console front end over Core's Maid engine. Plain net10.0 so it prints to
+    the console (the desktop exe is a WinExe and can't, ADR-016). Shared settings come from Directory.Build.props.
+    In the solution, unlike tools/IconBuilder, so the gate builds it and the tests can check its metadata.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>OpossumMaid</AssemblyName>
+    <RootNamespace>OG_opossum_command.Maid</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\OG_opossum_command.Core\OG_opossum_command.Core.csproj" />
+  </ItemGroup>
+
+</Project>

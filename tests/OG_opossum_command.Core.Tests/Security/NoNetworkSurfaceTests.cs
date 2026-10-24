@@ -43,14 +43,24 @@ public sealed class NoNetworkSurfaceTests
 
     public static TheoryData<string> AppAssemblies()
     {
-        var desktopExe = typeof(NoNetworkSurfaceTests).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
-            .Single(a => a.Key == "DesktopExePath").Value!;
-        return new TheoryData<string>
+        var metadata = typeof(NoNetworkSurfaceTests).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().ToList();
+        var desktopExe = metadata.Single(a => a.Key == "DesktopExePath").Value!;
+        var data = new TheoryData<string>
         {
             typeof(CoreHost).Assembly.Location,
             // The exe is an apphost; the managed code lives in the .dll beside it.
             Path.ChangeExtension(desktopExe, ".dll"),
+            // Opossum Maid's CLI (ADR-058).
+            metadata.Single(a => a.Key == "MaidCliPath").Value!,
         };
+
+        // PdfPig (ADR-059) parses untrusted PDFs inside the app, so its assemblies get the same check.
+        foreach (var pdfPig in Directory.EnumerateFiles(Path.GetDirectoryName(typeof(CoreHost).Assembly.Location)!, "UglyToad.PdfPig*.dll").Order(StringComparer.Ordinal))
+        {
+            data.Add(pdfPig);
+        }
+
+        return data;
     }
 
     [Theory]
@@ -71,7 +81,8 @@ public sealed class NoNetworkSurfaceTests
             .Select(t => $"{metadata.GetString(t.Namespace)}.{metadata.GetString(t.Name)}")
             .ToList();
 
-        Assert.Contains("System.Object", types); // the metadata was really read
+        // The metadata was really read (a type-forwarding facade such as PdfPig's package stub defines nothing but <Module>).
+        Assert.True(types.Contains("System.Object") || metadata.TypeDefinitions.Count <= 1, $"No types read from {assemblyPath}.");
         Assert.Empty(assemblies.Intersect(ForbiddenAssemblies, StringComparer.OrdinalIgnoreCase));
         Assert.DoesNotContain(types, t =>
             (t.StartsWith("System.Net", StringComparison.Ordinal) || t.StartsWith("System.IO.Pipes", StringComparison.Ordinal))

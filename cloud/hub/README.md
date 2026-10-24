@@ -63,9 +63,11 @@ Two ways to build it:
      (in VS Code: select the lines and press Shift+Tab until `- nowRoot:` starts at column 1).
 5. Delete the empty **Screen1**. Select **App** in the Tree view and set **StartScreen** to
    `NowScreen` (`App.pa.yaml`; Studio can't paste the App object).
-6. Optional: **Themes → + Add theme** with the primary color `#5457c4` so any control you add later
-   matches. The pasted controls already set their colors (blueprint palette, accent `#5457c4`) and
-   don't depend on the theme.
+6. Optional: **Themes → + Add theme** with the primary color `#8B7CF6` so any control you add later
+   matches. The pasted controls already set their colors (my graphite palette: background `#16181D`,
+   cards `#1F2229`, lines `#2C3039`, text `#E8EAF0` / `#A3A9B8`, soft violet accent `#8B7CF6`, teal
+   detail `#5EC4B6`, and muted red / amber / green `#F0787A` / `#E5B567` / `#6FCF97` for status) and
+   don't depend on the theme. Every text color passes WCAG AA (4.5:1) on the surface it sits on.
 7. Press **F5** and check:
    - **Now** shows the PC time and counts. **PC seen** turns amber after 30 minutes without a new
      status during work hours. The red banner shows only when something needs you.
@@ -109,8 +111,13 @@ so check these the first time:
   after the call.
 - **Dates.** SharePoint date/time columns show in the device's time zone (Pacific on your phone and
   PC). To Do due dates are read as their date part only.
-- **Light theme only.** The colors are the blueprint's light palette. Teams in dark mode shows the app
-  light.
+- **Dark theme only.** The colors are my graphite palette, written on each control. Teams in light
+  mode still shows the app dark.
+- **Hover and press.** Modern buttons (`ModernButton@1.0.0`) have no hover or pressed color
+  properties: Fluent makes those states from `BasePaletteColor`. So I only added what the docs list:
+  `Tooltip` on the refresh buttons, `FontWeight` for the active tab and filter, and on the Day
+  screen's *Earlier days* gallery a `TemplateFill` highlight for the open day plus `Transition: Pop`
+  on hover. Containers and text get no hover states.
 
 ## The SharePoint page fallback
 

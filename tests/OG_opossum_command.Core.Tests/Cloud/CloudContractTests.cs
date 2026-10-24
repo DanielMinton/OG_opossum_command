@@ -59,6 +59,52 @@ public sealed class CloudContractTests : IDisposable
         Assert.NotEmpty(Directory.GetFiles(FlowsFolder(), "*.json"));
     }
 
+    /// <summary>
+    /// Power Automate refuses to save a flow whose trigger or action description is over 256 characters
+    /// (ActionDescriptionTooLong), and it does so at import time, after you've mapped every connection. Placeholders get
+    /// longer when they're filled in (a OneDrive folder id is 34 characters), so they're expanded to worst-case lengths first.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(FlowFiles))]
+    public void Every_trigger_and_action_description_fits_Power_Automates_limit(string fileName)
+    {
+        const int Budget = 256;
+        static string Filled(string text) => text
+            .Replace("__ONEDRIVE_OUTBOX_ID__", new string('x', 40), StringComparison.Ordinal)
+            .Replace("__ONEDRIVE_FOLDER_ID__", new string('x', 40), StringComparison.Ordinal)
+            .Replace("__SITE_URL__", new string('x', 90), StringComparison.Ordinal)
+            .Replace("__USER_UPN__", new string('x', 40), StringComparison.Ordinal);
+        using var flow = LoadFlow(fileName);
+        var tooLong = new List<string>();
+        void Walk(JsonElement element, string path)
+        {
+            if (element.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var property in element.EnumerateObject())
+                {
+                    if (property.NameEquals("description") && property.Value.ValueKind == JsonValueKind.String
+                        && Filled(property.Value.GetString()!).Length > Budget)
+                    {
+                        tooLong.Add($"{path} ({Filled(property.Value.GetString()!).Length} characters once filled in)");
+                    }
+
+                    Walk(property.Value, path + "." + property.Name);
+                }
+            }
+            else if (element.ValueKind == JsonValueKind.Array)
+            {
+                var i = 0;
+                foreach (var item in element.EnumerateArray())
+                {
+                    Walk(item, $"{path}[{i++}]");
+                }
+            }
+        }
+
+        Walk(flow.RootElement.GetProperty("definition"), "definition");
+        Assert.True(tooLong.Count == 0, "Descriptions over " + Budget + " characters: " + string.Join(", ", tooLong));
+    }
+
     [Theory]
     [MemberData(nameof(FlowFiles))]
     public void Parse_JSON_actions_accept_what_the_app_writes(string fileName)

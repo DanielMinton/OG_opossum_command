@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -7,6 +8,7 @@ using OG_opossum_command.Core.Exports;
 using OG_opossum_command.Core.Feedback;
 using OG_opossum_command.Core.History;
 using OG_opossum_command.Core.Hosting;
+using OG_opossum_command.Core.Maid;
 using OG_opossum_command.Core.Notifications;
 using OG_opossum_command.Core.Profiles;
 using OG_opossum_command.Core.Scheduling;
@@ -246,6 +248,47 @@ public sealed partial class SettingsViewModel : ObservableObject
         {
             _host.Scheduler.IsPaused = value;
             Changed?.Invoke();
+        }
+    }
+
+    /// <summary>One line about the last tidy-up plan (ADR-058).</summary>
+    [ObservableProperty]
+    public partial string TidyStatus { get; set; } = "Makes a plan for the work inbox and Downloads and opens the report. Nothing moves until you apply it with the OpossumMaid command.";
+
+    /// <summary>A plan is being made.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(TidyUpCommand))]
+    public partial bool IsTidying { get; set; }
+
+    private bool CanTidyUp() => !IsTidying;
+
+    /// <summary>
+    /// "Tidy up": runs the read-only planner off the UI thread, then opens the HTML report. Applying stays in the CLI,
+    /// on purpose: a button that moves files is one click too easy.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanTidyUp))]
+    private async Task TidyUp()
+    {
+        IsTidying = true;
+        TidyStatus = "Reading the inbox and Downloads. Nothing moves…";
+        try
+        {
+            var (plan, _, report) = await Task.Run(() => new MaidEngine(_host.Paths).Plan());
+            var count = (MaidAction action) => plan.Items.Count(i => i.Action == action);
+            TidyStatus = $"Plan {plan.Id}: {count(MaidAction.Move)} to file, {count(MaidAction.Trash)} to trash review, {count(MaidAction.Decide)} need you, {count(MaidAction.Security)} security. Apply with: OpossumMaid approve {plan.Id}, then OpossumMaid apply {plan.Id}.";
+            using var viewer = Process.Start(new ProcessStartInfo(report) { UseShellExecute = true });
+        }
+        catch (MaidConfigException ex)
+        {
+            TidyStatus = ex.Message;
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        {
+            TidyStatus = $"Couldn't make the plan: {ex.Message}";
+        }
+        finally
+        {
+            IsTidying = false;
         }
     }
 

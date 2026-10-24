@@ -24,6 +24,13 @@ public interface IAppPaths
     string LogsDirectory { get; }
 
     /// <summary>
+    /// Opossum Maid's own folder (ADR-058): <c>&lt;DataRoot&gt;\maid</c>, holding <c>taxonomy.json</c>, <c>rules.json</c>,
+    /// <c>learned.json</c>, <c>plans\</c>, <c>runs\</c>, <c>bundles\</c> and <c>exports\</c>. Plans and journals name real files, so
+    /// this folder never leaves the PC.
+    /// </summary>
+    string MaidDirectory { get; }
+
+    /// <summary>
     /// Root of the signed-in OneDrive for Business folder (<c>%OneDriveCommercial%</c>), or <c>null</c> when none is
     /// signed in. The app never creates this root. It creates only its own <c>OG_opossum_command</c> subfolder (when this
     /// root exists) and that folder's <c>outbox\</c>; there it reads <c>calendar.json</c> and <c>tomorrow.json</c> and

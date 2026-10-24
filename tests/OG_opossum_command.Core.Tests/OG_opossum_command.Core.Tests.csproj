@@ -46,4 +46,10 @@
     <ProjectReference Include="..\..\src\OG_opossum_command.Desktop\OG_opossum_command.Desktop.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" Private="false" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Opossum Maid's CLI (ADR-058) is checked by NoNetworkSurfaceTests the same way: built first, read as metadata only. -->
+    <AssemblyMetadata Include="MaidCliPath" Value="$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\tools\OpossumMaid\bin\$(Configuration)\net10.0\OpossumMaid.dll'))" />
+    <ProjectReference Include="..\..\tools\OpossumMaid\OpossumMaid.csproj" ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
 </Project>

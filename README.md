@@ -7,7 +7,7 @@
 [![CI](https://github.com/DanielMinton/IgniteMeDammit/actions/workflows/ci.yml/badge.svg)](https://github.com/DanielMinton/IgniteMeDammit/actions/workflows/ci.yml)
 ![.NET 10](https://img.shields.io/badge/.NET-10-512BD4)
 ![WPF](https://img.shields.io/badge/UI-WPF%20%2B%20Fluent-0078D4)
-![Tests](https://img.shields.io/badge/tests-469%20passing-2ea44f)
+![Tests](https://img.shields.io/badge/tests-566%20passing-2ea44f)
 
 A Windows tray app that runs my repeatable routines (open these apps, these pages, this checklist,
 this script) with one click or one hotkey, remembers every run, and talks to Microsoft 365 without
@@ -49,6 +49,10 @@ they don't exist.
   and synthesized sound cues. All of it respects Windows "Animation effects", high contrast and text
   scaling. Narrator reads what matters.
 - **Microsoft 365 without the network.** See below. This is the part I'm proudest of.
+- **Opossum Maid**, a tidy-up for the work inbox and Downloads. It reads what each file actually is,
+  proposes a short name, a folder and tags, separates junk from what I need, and waits for me to
+  approve. Every run undoes exactly, nothing is ever deleted, and work and personal never mix.
+  [More below](#opossum-maid).
 
 <table>
 <tr>
@@ -110,7 +114,7 @@ The interesting engineering is in how that was controlled:
   warnings as errors, the full test suite, and two headless smoke runs against a scratch data
   folder. A phase only counts when the gate passes. Failed gates get a couple of repair attempts,
   then it stops. Every passed phase is a tagged commit I can roll back to.
-- **Every meaningful call is written down** in [docs/DECISIONS.md](docs/DECISIONS.md): 50-odd
+- **Every meaningful call is written down** in [docs/DECISIONS.md](docs/DECISIONS.md): 60-odd
   ADRs, each with what was decided, why, and what would make me change my mind.
 - **[docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)** maps every acceptance criterion in the spec to a
   named test, a manual check, or an honest "deferred, and here's why".
@@ -130,7 +134,7 @@ me, and that's the part I want you to judge.
 | Secret redaction | `src/OG_opossum_command.Core/History/OutputRedactor.cs` and its tests |
 | Microsoft 365 integration | [`cloud/`](cloud), `src/OG_opossum_command.Core/Exports/`, `Calendar/` |
 | WPF, MVVM, accessibility, motion | `src/OG_opossum_command.Desktop/` (`Accessibility/Motion.cs` is the fun one) |
-| Proof it holds together | `tests/` (469 tests), [CI](.github/workflows/ci.yml) |
+| Proof it holds together | `tests/` (566 tests), [CI](.github/workflows/ci.yml) |
 | How AI was kept on a leash | [build.sh](build.sh), the `GUARDRAILS` block |
 
 ## Stack
@@ -139,7 +143,8 @@ me, and that's the part I want you to judge.
 - **WPF** with the built-in Fluent theme (`ThemeMode=System`), **CommunityToolkit.Mvvm**,
   **H.NotifyIcon.Wpf** for the tray.
 - **SQLite** via Microsoft.Data.Sqlite, with versioned migrations.
-- **xUnit** for tests. Three runtime dependencies in total, and each one had to justify itself.
+- **PdfPig** for PDF text in Opossum Maid (Apache-2.0, pure managed; ADR-059 says why I gave in).
+- **xUnit** for tests. Four runtime dependencies in total, and each one had to justify itself.
 - **Power Automate + SharePoint + OneDrive** for the Microsoft 365 side, standard connectors only.
 
 No MSIX, no installer framework, no services. It's a per-user, self-contained `win-x64` publish that
@@ -183,6 +188,32 @@ so nobody gets to sneak `cmd /c` through the side door.
 Closing the window hides it to the tray. Quit is in the tray menu. Launching it a second time just
 brings the first one forward.
 
+### Opossum Maid
+
+A digital maid for the two places files pile up: the work inbox (`%OneDriveCommercial%\_Inbox`) and
+`%USERPROFILE%\Downloads`. It reads each file on this PC (PDF, Word, Excel, PowerPoint, text, HTML,
+photo metadata), decides what it is and what it's about, and proposes a home: about seven folders a
+side, two levels at most, with tags carrying the detail. Work goes under the work OneDrive,
+personal under `%USERPROFILE%\Personal`.
+
+```bash
+OpossumMaid plan                         # read-only: plan + HTML report (also Settings › Tidy up)
+OpossumMaid learn <plan> i0007 --side personal --category Money    # fix one; it learns the rule
+OpossumMaid approve <plan>
+OpossumMaid apply <plan>                 # moves, journals, prints the run id
+OpossumMaid undo <run>                   # puts it all back exactly
+```
+
+The rules it never bends: it proposes first and moves nothing until the plan is approved. Junk goes
+to `_Trash Review` for 30 days and only `purge --confirm` sends it on to the Recycle Bin. A file never
+crosses between work and personal unless I say so. Credential-looking files are flagged, never
+opened. Work folders that are already filed stay put, because they might be shared. For personal
+files there's an optional deeper pass: `bundle` writes a scrubbed file that Claude Code reads with
+`/maid-reason`, and `merge` takes its answers back. The app itself still never calls an AI
+([docs/MAID-HANDOFF.md](docs/MAID-HANDOFF.md)). Config lives in `maid\taxonomy.json`,
+`maid\rules.json` (put your organisation's name or e-mail domain in `workSignals`) and
+`maid\learned.json`.
+
 ### Where data lives
 
 Every per-user path comes from one `AppPaths` service in Core:
@@ -199,12 +230,14 @@ Every per-user path comes from one `AppPaths` service in Core:
 | `profiles\<Work\|Personal>\scripts\` | The only place scripts run from |
 | `profiles\<Work\|Personal>\profile.json` | Optional: `allowedActions`, `calendarFile`, `exports` |
 | `logs\crash.log`, `logs\exports.log` | Startup failures and export state changes |
+| `maid\` | Opossum Maid: `taxonomy.json`, `rules.json`, `learned.json`, `plans\`, `runs\` (undo journals), `bundles\`, `exports\` (tags) |
 
 The app never reads or writes relative to the current directory and never touches the registry.
 Outside the data root it only uses the profile's exports folder (by default
 `%OneDriveCommercial%\OG_opossum_command` for Work, none for Personal). It reads `calendar.json` and
 `tomorrow.json`, writes only `status.json`, `outbox\*.json` and short-lived temp files, and never
-creates a OneDrive root.
+creates a OneDrive root. The one exception is Opossum Maid, and only when I ask: `plan` reads its
+sources, and only an approved `apply` (or an `undo`) moves files between them and the side roots.
 
 ## Repo layout
 
@@ -217,6 +250,7 @@ creates a OneDrive root.
 | `examples/` | Example workflows and a trusted example script |
 | `docs/` | Spec, decisions, acceptance matrix, schema, flow guide |
 | `spikes/feasibility` | The throwaway day-one spike that proved this could run on a locked-down PC |
+| `tools/OpossumMaid` | The Opossum Maid command line (in the solution; the engine is `Core/Maid`) |
 | `tools/IconBuilder` | Builds the multi-size `.ico` from the source artwork |
 | `build.sh` | The phased, gated build harness |
 

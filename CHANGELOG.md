@@ -3,6 +3,26 @@
 What changed in OG Opossum Command Central, release by release. Versions follow
 [SemVer](https://semver.org/). The ADR numbers point at `docs/DECISIONS.md` if you want the why.
 
+## Unreleased
+
+### Added
+
+- **Opossum Maid** (ADR-058 to ADR-069): a tidy-up for the work download inbox and Downloads. It
+  reads what each file actually is and what it's about (PDF, Word, Excel, PowerPoint, text, HTML and
+  photo metadata, all on this PC), proposes a category folder, a short plain name, tags, and keep or
+  junk, with reasons. Folders stay few (about seven a side, two levels at most); tags carry the
+  detail. Nothing moves until I approve the plan, every run can be undone exactly, and nothing is
+  ever deleted: junk waits 30 days in `_Trash Review`. Work and personal files never cross on their
+  own, credential-looking files are never opened, and filed work folders are left alone.
+- **`OpossumMaid` command line** (`tools/OpossumMaid`): `scan`, `plan`, `report`, `approve`, `apply`,
+  `undo`, `learn`, `bundle`, `merge`, `purge`.
+- **It learns** from corrections (`learn`, or edits to the plan file): "files mentioning X are Y".
+- **Reasoning hand-off for personal files**: `bundle` writes a scrubbed file Claude Code reads with
+  `/maid-reason`, `merge` takes its decisions back. The app itself still makes no AI or network call.
+  Spec: [docs/MAID-HANDOFF.md](docs/MAID-HANDOFF.md).
+- **Settings › Tidy up**: makes a plan and opens the report. Applying stays on the command line.
+- **PdfPig** (Apache-2.0) for PDF text, the fourth runtime dependency (ADR-059).
+
 ## 0.3.0 — 2026-10-23
 
 ### Added

@@ -45,6 +45,9 @@ public sealed class AppPaths : IAppPaths
     /// <summary>Subfolder of the exports folder that holds alert files for the flow (ADR-052).</summary>
     public const string OutboxFolderName = "outbox";
 
+    /// <summary>Folder under the data root that holds Opossum Maid's taxonomy, rules, learned rules, plans and run journals (ADR-058).</summary>
+    public const string MaidFolderName = "maid";
+
     private AppPaths(string dataRoot, bool isOverridden, string? oneDriveCommercialRoot, string? oneDriveConsumerRoot)
     {
         DataRoot = dataRoot;
@@ -52,6 +55,7 @@ public sealed class AppPaths : IAppPaths
         DatabasePath = Path.Combine(dataRoot, DatabaseFileName);
         ProfilesDirectory = Path.Combine(dataRoot, "profiles");
         LogsDirectory = Path.Combine(dataRoot, "logs");
+        MaidDirectory = Path.Combine(dataRoot, MaidFolderName);
         OneDriveCommercialRoot = oneDriveCommercialRoot;
         OneDriveConsumerRoot = oneDriveConsumerRoot;
     }
@@ -70,6 +74,9 @@ public sealed class AppPaths : IAppPaths
 
     /// <inheritdoc />
     public string LogsDirectory { get; }
+
+    /// <inheritdoc />
+    public string MaidDirectory { get; }
 
     /// <inheritdoc />
     public string? OneDriveCommercialRoot { get; }

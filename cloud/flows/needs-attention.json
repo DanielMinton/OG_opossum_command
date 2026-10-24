@@ -40,7 +40,7 @@
     "triggers": {
       "When_an_alert_file_is_created": {
         "type": "OpenApiConnection",
-        "description": "OneDrive for Business: When a file is created (properties only), folder __ONEDRIVE_FOLDER__/outbox, no subfolders. folderId takes the folder's unique id, not its path: __ONEDRIVE_OUTBOX_ID__ is filled at deploy time by re-picking /OG_opossum_command/outbox in the trigger's Folder box after import (the metadata block maps the id to that path). The trigger condition approximates the app's name pattern ^\\d{8}-\\d{6}-[0-9a-f]{32}\\.json$ (53 characters, dashes at positions 9 and 16, .json).",
+        "description": "OneDrive for Business: file created in __ONEDRIVE_FOLDER__/outbox (no subfolders). folderId is the folder's id (re-pick it after import if blank). The condition matches the app's alert names: <yyyyMMdd-HHmmss>-<32 hex>.json.",
         "inputs": {
           "host": {
             "connectionName": "shared_onedriveforbusiness",

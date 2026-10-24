@@ -127,7 +127,7 @@
                   "operationId": "CreateToDoListV2"
                 },
                 "parameters": {
-                  "displayName": "Requests"
+                  "body/displayName": "Requests"
                 }
               }
             },
@@ -180,8 +180,8 @@
               },
               "parameters": {
                 "folderId": "@variables('RequestsListId')",
-                "item/title": "@outputs('Task_title')",
-                "item/body/content": "<p>From: @{outputs('Sender_html')}<br>Received: @{outputs('Received_local')} (Pacific)<br><a href=\"@{outputs('Message_link')}\">Open the email in Outlook</a></p><p style=\"color:#888888;font-size:smaller\">@{outputs('Dedupe_marker')}</p>"
+                "body/title": "@outputs('Task_title')",
+                "body/body/content": "<p>From: @{outputs('Sender_html')}<br>Received: @{outputs('Received_local')} (Pacific)<br><a href=\"@{outputs('Message_link')}\">Open the email in Outlook</a></p><p style=\"color:#888888;font-size:smaller\">@{outputs('Dedupe_marker')}</p>"
               }
             }
           }
