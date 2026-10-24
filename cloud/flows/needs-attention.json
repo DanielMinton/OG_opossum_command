@@ -38,352 +38,426 @@
       }
     },
     "triggers": {
-      "When_an_alert_file_is_created": {
-        "type": "OpenApiConnection",
-        "description": "OneDrive for Business: file created in __ONEDRIVE_FOLDER__/outbox (no subfolders). folderId is the folder's id (re-pick it after import if blank). The condition matches the app's alert names: <yyyyMMdd-HHmmss>-<32 hex>.json.",
-        "inputs": {
-          "host": {
-            "connectionName": "shared_onedriveforbusiness",
-            "operationId": "OnNewFilesV2",
-            "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness"
-          },
-          "parameters": {
-            "folderId": "__ONEDRIVE_OUTBOX_ID__",
-            "includeSubfolders": false
-          }
-        },
+      "Every_5_minutes": {
+        "type": "Recurrence",
+        "description": "Every 5 minutes: list __ONEDRIVE_FOLDER__/outbox and handle each alert file the app dropped there. Polling replaces OneDrive's 'file created' trigger, which misses files moved into a folder.",
         "recurrence": {
           "frequency": "Minute",
-          "interval": 1
+          "interval": 5
         },
-        "splitOn": "@triggerOutputs()?['body/value']",
-        "conditions": [
-          {
-            "expression": "@and(equals(length(coalesce(triggerBody()?['Name'], '')), 53), endsWith(coalesce(triggerBody()?['Name'], ''), '.json'), equals(substring(concat(coalesce(triggerBody()?['Name'], ''), '                '), 8, 1), '-'), equals(substring(concat(coalesce(triggerBody()?['Name'], ''), '                '), 15, 1), '-'), not(equals(triggerBody()?['IsFolder'], true)))"
-          }
-        ],
         "runtimeConfiguration": {
           "concurrency": {
             "runs": 1,
-            "maximumWaitingRuns": 100
+            "maximumWaitingRuns": 1
           }
-        },
-        "metadata": {
-          "__ONEDRIVE_OUTBOX_ID__": "/OG_opossum_command/outbox"
         }
       }
     },
     "actions": {
-      "Get_alert_file_content": {
-        "type": "OpenApiConnection",
+      "Init_invalid_count": {
+        "type": "InitializeVariable",
         "runAfter": {},
+        "inputs": {
+          "variables": [
+            {
+              "name": "InvalidAlerts",
+              "type": "integer",
+              "value": 0
+            }
+          ]
+        }
+      },
+      "List_outbox": {
+        "type": "OpenApiConnection",
+        "runAfter": {
+          "Init_invalid_count": [
+            "Succeeded"
+          ]
+        },
+        "description": "Files in the outbox folder (by id).",
         "inputs": {
           "host": {
             "connectionName": "shared_onedriveforbusiness",
-            "operationId": "GetFileContent",
+            "operationId": "ListFolderV2",
             "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness"
           },
           "parameters": {
-            "id": "@triggerBody()?['Id']",
-            "inferContentType": false
+            "id": "__ONEDRIVE_OUTBOX_ID__"
           }
         }
       },
-      "Parse_alert_json": {
-        "type": "ParseJson",
+      "Filter_alert_files": {
+        "type": "Query",
         "runAfter": {
-          "Get_alert_file_content": [
+          "List_outbox": [
             "Succeeded"
           ]
         },
+        "description": "Only the app's alert names: <yyyyMMdd-HHmmss>-<32 hex>.json, not folders.",
         "inputs": {
-          "content": "@json(base64ToString(body('Get_alert_file_content')?['$content']))",
-          "schema": {
-            "type": "object",
-            "properties": {
-              "schemaVersion": {
-                "type": "integer"
+          "from": "@body('List_outbox')?['value']",
+          "where": "@and(equals(length(coalesce(item()?['Name'], '')), 53), endsWith(coalesce(item()?['Name'], ''), '.json'), equals(substring(concat(coalesce(item()?['Name'], ''), '                '), 8, 1), '-'), equals(substring(concat(coalesce(item()?['Name'], ''), '                '), 15, 1), '-'), not(equals(item()?['IsFolder'], true)))"
+        }
+      },
+      "For_each_alert_file": {
+        "type": "Foreach",
+        "runAfter": {
+          "Filter_alert_files": [
+            "Succeeded"
+          ],
+          "Init_invalid_count": [
+            "Succeeded"
+          ]
+        },
+        "foreach": "@body('Filter_alert_files')",
+        "runtimeConfiguration": {
+          "concurrency": {
+            "repetitions": 1
+          }
+        },
+        "actions": {
+          "Get_alert_file_content": {
+            "type": "OpenApiConnection",
+            "runAfter": {},
+            "inputs": {
+              "host": {
+                "connectionName": "shared_onedriveforbusiness",
+                "operationId": "GetFileContent",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness"
               },
-              "event": {
-                "type": "string"
-              },
-              "eventId": {
-                "type": "string"
-              },
-              "at": {
-                "type": "string"
-              },
-              "profile": {
-                "type": "string"
-              },
-              "workflow": {
-                "type": "string"
-              },
-              "workflowName": {
-                "type": "string"
-              },
-              "runId": {
-                "type": "string"
-              },
-              "step": {
-                "type": [
-                  "string",
-                  "null"
+              "parameters": {
+                "id": "@items('For_each_alert_file')?['Id']",
+                "inferContentType": false
+              }
+            }
+          },
+          "Parse_alert_json": {
+            "type": "ParseJson",
+            "runAfter": {
+              "Get_alert_file_content": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "content": "@json(base64ToString(body('Get_alert_file_content')?['$content']))",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "schemaVersion": {
+                    "type": "integer"
+                  },
+                  "event": {
+                    "type": "string"
+                  },
+                  "eventId": {
+                    "type": "string"
+                  },
+                  "at": {
+                    "type": "string"
+                  },
+                  "profile": {
+                    "type": "string"
+                  },
+                  "workflow": {
+                    "type": "string"
+                  },
+                  "workflowName": {
+                    "type": "string"
+                  },
+                  "runId": {
+                    "type": "string"
+                  },
+                  "step": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "schemaVersion",
+                  "event",
+                  "eventId",
+                  "workflow",
+                  "message"
                 ]
+              }
+            }
+          },
+          "Check_alert_is_valid": {
+            "type": "If",
+            "description": "schemaVersion 1, eventId is 32 lowercase characters without quotes, and the file name carries the same eventId (also keeps the OData filter below safe).",
+            "runAfter": {
+              "Parse_alert_json": [
+                "Succeeded"
+              ]
+            },
+            "expression": {
+              "and": [
+                {
+                  "equals": [
+                    "@body('Parse_alert_json')?['schemaVersion']",
+                    1
+                  ]
+                },
+                {
+                  "equals": [
+                    "@length(body('Parse_alert_json')?['eventId'])",
+                    32
+                  ]
+                },
+                {
+                  "equals": [
+                    "@toLower(body('Parse_alert_json')?['eventId'])",
+                    "@body('Parse_alert_json')?['eventId']"
+                  ]
+                },
+                {
+                  "equals": [
+                    "@contains(body('Parse_alert_json')?['eventId'], '''')",
+                    false
+                  ]
+                },
+                {
+                  "equals": [
+                    "@contains(items('For_each_alert_file')?['Name'], body('Parse_alert_json')?['eventId'])",
+                    true
+                  ]
+                }
+              ]
+            },
+            "actions": {
+              "Find_existing_alert": {
+                "type": "OpenApiConnection",
+                "runAfter": {},
+                "inputs": {
+                  "host": {
+                    "connectionName": "shared_sharepointonline",
+                    "operationId": "GetItems",
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                  },
+                  "parameters": {
+                    "dataset": "__SITE_URL__",
+                    "table": "Opossum Alerts",
+                    "$filter": "EventId eq '@{body('Parse_alert_json')?['eventId']}'",
+                    "$top": 1
+                  }
+                }
               },
-              "message": {
-                "type": "string"
+              "If_alert_is_new": {
+                "type": "If",
+                "runAfter": {
+                  "Find_existing_alert": [
+                    "Succeeded"
+                  ]
+                },
+                "expression": {
+                  "and": [
+                    {
+                      "equals": [
+                        "@length(body('Find_existing_alert')?['value'])",
+                        0
+                      ]
+                    }
+                  ]
+                },
+                "actions": {
+                  "Pacific_time_now": {
+                    "type": "Compose",
+                    "inputs": "@convertFromUtc(utcNow(), 'Pacific Standard Time', 'HH:mm')"
+                  },
+                  "If_quiet_hours": {
+                    "type": "If",
+                    "description": "Quiet hours are the flow's job (the app's quiet mode does not hold alerts back). Between 21:00 and 07:00 Pacific, wait until 07:00.",
+                    "runAfter": {
+                      "Pacific_time_now": [
+                        "Succeeded"
+                      ]
+                    },
+                    "expression": {
+                      "or": [
+                        {
+                          "greaterOrEquals": [
+                            "@outputs('Pacific_time_now')",
+                            "21:00"
+                          ]
+                        },
+                        {
+                          "less": [
+                            "@outputs('Pacific_time_now')",
+                            "07:00"
+                          ]
+                        }
+                      ]
+                    },
+                    "actions": {
+                      "Delay_until_7am": {
+                        "type": "Wait",
+                        "inputs": {
+                          "until": {
+                            "timestamp": "@{convertToUtc(concat(convertFromUtc(addHours(utcNow(), 10), 'Pacific Standard Time', 'yyyy-MM-dd'), 'T07:00:00'), 'Pacific Standard Time')}"
+                          }
+                        }
+                      }
+                    },
+                    "else": {
+                      "actions": {}
+                    }
+                  },
+                  "Event_label": {
+                    "type": "Compose",
+                    "runAfter": {
+                      "If_quiet_hours": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": "@if(equals(body('Parse_alert_json')?['event'], 'run.failed'), 'failed', if(equals(body('Parse_alert_json')?['event'], 'run.needsAttention'), 'needs attention', if(equals(body('Parse_alert_json')?['event'], 'run.overrun'), 'is overrunning', body('Parse_alert_json')?['event'])))"
+                  },
+                  "Message_html": {
+                    "type": "Compose",
+                    "description": "HTML-escaped message text for the Teams post.",
+                    "runAfter": {
+                      "Event_label": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": "@replace(replace(replace(coalesce(body('Parse_alert_json')?['message'], ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')"
+                  },
+                  "Workflow_name_html": {
+                    "type": "Compose",
+                    "runAfter": {
+                      "Message_html": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": "@replace(replace(replace(coalesce(body('Parse_alert_json')?['workflowName'], body('Parse_alert_json')?['workflow']), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')"
+                  },
+                  "Post_alert_to_Teams": {
+                    "type": "OpenApiConnection",
+                    "runAfter": {
+                      "Workflow_name_html": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": {
+                      "host": {
+                        "connectionName": "shared_teams",
+                        "operationId": "PostMessageToConversation",
+                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams"
+                      },
+                      "parameters": {
+                        "poster": "Flow bot",
+                        "location": "Chat with Flow bot",
+                        "body/recipient": "__USER_UPN__",
+                        "body/messageBody": "<p>OG Opossum: <b>@{outputs('Workflow_name_html')}</b> @{outputs('Event_label')} (@{coalesce(body('Parse_alert_json')?['at'], '')}).</p><p>@{outputs('Message_html')}</p><p>Step: @{coalesce(body('Parse_alert_json')?['step'], '-')}. Fix it on the PC in OG Opossum Command Central.</p>"
+                      }
+                    }
+                  },
+                  "Create_alert_row": {
+                    "type": "OpenApiConnection",
+                    "runAfter": {
+                      "Post_alert_to_Teams": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": {
+                      "host": {
+                        "connectionName": "shared_sharepointonline",
+                        "operationId": "PostItem",
+                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                      },
+                      "parameters": {
+                        "dataset": "__SITE_URL__",
+                        "table": "Opossum Alerts",
+                        "item/Title": "@{coalesce(body('Parse_alert_json')?['workflowName'], body('Parse_alert_json')?['workflow'])}: @{body('Parse_alert_json')?['event']}",
+                        "item/EventId": "@body('Parse_alert_json')?['eventId']",
+                        "item/Event": "@body('Parse_alert_json')?['event']",
+                        "item/Workflow": "@body('Parse_alert_json')?['workflow']",
+                        "item/WorkflowName": "@coalesce(body('Parse_alert_json')?['workflowName'], body('Parse_alert_json')?['workflow'])",
+                        "item/RunId": "@coalesce(body('Parse_alert_json')?['runId'], '')",
+                        "item/Step": "@coalesce(body('Parse_alert_json')?['step'], '')",
+                        "item/Message": "@body('Parse_alert_json')?['message']",
+                        "item/At": "@formatDateTime(coalesce(body('Parse_alert_json')?['at'], utcNow()), 'yyyy-MM-ddTHH:mm:ssZ')",
+                        "item/State/Value": "New"
+                      }
+                    }
+                  }
+                },
+                "else": {
+                  "actions": {}
+                }
+              },
+              "Delete_alert_file": {
+                "type": "OpenApiConnection",
+                "description": "Runs only when If_alert_is_new succeeded: the row was created (or already existed). A failed Teams post or row write leaves the file for a resubmit.",
+                "runAfter": {
+                  "If_alert_is_new": [
+                    "Succeeded"
+                  ]
+                },
+                "inputs": {
+                  "host": {
+                    "connectionName": "shared_onedriveforbusiness",
+                    "operationId": "DeleteFile",
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness"
+                  },
+                  "parameters": {
+                    "id": "@items('For_each_alert_file')?['Id']"
+                  }
+                }
               }
             },
-            "required": [
-              "schemaVersion",
-              "event",
-              "eventId",
-              "workflow",
-              "message"
-            ]
-          }
-        }
-      },
-      "Check_alert_is_valid": {
-        "type": "If",
-        "description": "schemaVersion 1, eventId is 32 lowercase characters without quotes, and the file name carries the same eventId (also keeps the OData filter below safe).",
-        "runAfter": {
-          "Parse_alert_json": [
-            "Succeeded"
-          ]
-        },
-        "expression": {
-          "and": [
-            {
-              "equals": [
-                "@body('Parse_alert_json')?['schemaVersion']",
-                1
-              ]
-            },
-            {
-              "equals": [
-                "@length(body('Parse_alert_json')?['eventId'])",
-                32
-              ]
-            },
-            {
-              "equals": [
-                "@toLower(body('Parse_alert_json')?['eventId'])",
-                "@body('Parse_alert_json')?['eventId']"
-              ]
-            },
-            {
-              "equals": [
-                "@contains(body('Parse_alert_json')?['eventId'], '''')",
-                false
-              ]
-            },
-            {
-              "equals": [
-                "@contains(triggerBody()?['Name'], body('Parse_alert_json')?['eventId'])",
-                true
-              ]
-            }
-          ]
-        },
-        "actions": {},
-        "else": {
-          "actions": {
-            "Terminate_invalid_alert": {
-              "type": "Terminate",
-              "inputs": {
-                "runStatus": "Failed",
-                "runError": {
-                  "code": "AlertFileInvalid",
-                  "message": "The outbox file is not a schemaVersion 1 alert, or its eventId does not match its name. The file is left in place (the app prunes it within 7 days)."
+            "else": {
+              "actions": {
+                "Count_invalid_alert": {
+                  "type": "IncrementVariable",
+                  "runAfter": {},
+                  "description": "Invalid alert file: left in outbox (the app prunes it within 7 days) and counted, so the run still ends Failed below.",
+                  "inputs": {
+                    "name": "InvalidAlerts",
+                    "value": 1
+                  }
                 }
               }
             }
           }
         }
       },
-      "Find_existing_alert": {
-        "type": "OpenApiConnection",
-        "runAfter": {
-          "Check_alert_is_valid": [
-            "Succeeded"
-          ]
-        },
-        "inputs": {
-          "host": {
-            "connectionName": "shared_sharepointonline",
-            "operationId": "GetItems",
-            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-          },
-          "parameters": {
-            "dataset": "__SITE_URL__",
-            "table": "Opossum Alerts",
-            "$filter": "EventId eq '@{body('Parse_alert_json')?['eventId']}'",
-            "$top": 1
-          }
-        }
-      },
-      "If_alert_is_new": {
+      "If_any_invalid_alerts": {
         "type": "If",
         "runAfter": {
-          "Find_existing_alert": [
+          "For_each_alert_file": [
             "Succeeded"
           ]
         },
+        "description": "Terminate can't live inside a loop, so a bad alert file fails the run here instead.",
         "expression": {
           "and": [
             {
-              "equals": [
-                "@length(body('Find_existing_alert')?['value'])",
+              "greater": [
+                "@variables('InvalidAlerts')",
                 0
               ]
             }
           ]
         },
         "actions": {
-          "Pacific_time_now": {
-            "type": "Compose",
-            "inputs": "@convertFromUtc(utcNow(), 'Pacific Standard Time', 'HH:mm')"
-          },
-          "If_quiet_hours": {
-            "type": "If",
-            "description": "Quiet hours are the flow's job (the app's quiet mode does not hold alerts back). Between 21:00 and 07:00 Pacific, wait until 07:00.",
-            "runAfter": {
-              "Pacific_time_now": [
-                "Succeeded"
-              ]
-            },
-            "expression": {
-              "or": [
-                {
-                  "greaterOrEquals": [
-                    "@outputs('Pacific_time_now')",
-                    "21:00"
-                  ]
-                },
-                {
-                  "less": [
-                    "@outputs('Pacific_time_now')",
-                    "07:00"
-                  ]
-                }
-              ]
-            },
-            "actions": {
-              "Delay_until_7am": {
-                "type": "Wait",
-                "inputs": {
-                  "until": {
-                    "timestamp": "@{convertToUtc(concat(convertFromUtc(addHours(utcNow(), 10), 'Pacific Standard Time', 'yyyy-MM-dd'), 'T07:00:00'), 'Pacific Standard Time')}"
-                  }
-                }
-              }
-            },
-            "else": {
-              "actions": {}
-            }
-          },
-          "Event_label": {
-            "type": "Compose",
-            "runAfter": {
-              "If_quiet_hours": [
-                "Succeeded"
-              ]
-            },
-            "inputs": "@if(equals(body('Parse_alert_json')?['event'], 'run.failed'), 'failed', if(equals(body('Parse_alert_json')?['event'], 'run.needsAttention'), 'needs attention', if(equals(body('Parse_alert_json')?['event'], 'run.overrun'), 'is overrunning', body('Parse_alert_json')?['event'])))"
-          },
-          "Message_html": {
-            "type": "Compose",
-            "description": "HTML-escaped message text for the Teams post.",
-            "runAfter": {
-              "Event_label": [
-                "Succeeded"
-              ]
-            },
-            "inputs": "@replace(replace(replace(coalesce(body('Parse_alert_json')?['message'], ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')"
-          },
-          "Workflow_name_html": {
-            "type": "Compose",
-            "runAfter": {
-              "Message_html": [
-                "Succeeded"
-              ]
-            },
-            "inputs": "@replace(replace(replace(coalesce(body('Parse_alert_json')?['workflowName'], body('Parse_alert_json')?['workflow']), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')"
-          },
-          "Post_alert_to_Teams": {
-            "type": "OpenApiConnection",
-            "runAfter": {
-              "Workflow_name_html": [
-                "Succeeded"
-              ]
-            },
+          "Terminate_invalid_alert": {
+            "type": "Terminate",
             "inputs": {
-              "host": {
-                "connectionName": "shared_teams",
-                "operationId": "PostMessageToConversation",
-                "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams"
-              },
-              "parameters": {
-                "poster": "Flow bot",
-                "location": "Chat with Flow bot",
-                "body/recipient": "__USER_UPN__",
-                "body/messageBody": "<p>OG Opossum: <b>@{outputs('Workflow_name_html')}</b> @{outputs('Event_label')} (@{coalesce(body('Parse_alert_json')?['at'], '')}).</p><p>@{outputs('Message_html')}</p><p>Step: @{coalesce(body('Parse_alert_json')?['step'], '-')}. Fix it on the PC in OG Opossum Command Central.</p>"
-              }
-            }
-          },
-          "Create_alert_row": {
-            "type": "OpenApiConnection",
-            "runAfter": {
-              "Post_alert_to_Teams": [
-                "Succeeded"
-              ]
-            },
-            "inputs": {
-              "host": {
-                "connectionName": "shared_sharepointonline",
-                "operationId": "PostItem",
-                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-              },
-              "parameters": {
-                "dataset": "__SITE_URL__",
-                "table": "Opossum Alerts",
-                "item/Title": "@{coalesce(body('Parse_alert_json')?['workflowName'], body('Parse_alert_json')?['workflow'])}: @{body('Parse_alert_json')?['event']}",
-                "item/EventId": "@body('Parse_alert_json')?['eventId']",
-                "item/Event": "@body('Parse_alert_json')?['event']",
-                "item/Workflow": "@body('Parse_alert_json')?['workflow']",
-                "item/WorkflowName": "@coalesce(body('Parse_alert_json')?['workflowName'], body('Parse_alert_json')?['workflow'])",
-                "item/RunId": "@coalesce(body('Parse_alert_json')?['runId'], '')",
-                "item/Step": "@coalesce(body('Parse_alert_json')?['step'], '')",
-                "item/Message": "@body('Parse_alert_json')?['message']",
-                "item/At": "@coalesce(body('Parse_alert_json')?['at'], utcNow())",
-                "item/State/Value": "New"
+              "runStatus": "Failed",
+              "runError": {
+                "code": "AlertFileInvalid",
+                "message": "The outbox file is not a schemaVersion 1 alert, or its eventId does not match its name. The file is left in place (the app prunes it within 7 days)."
               }
             }
           }
         },
         "else": {
           "actions": {}
-        }
-      },
-      "Delete_alert_file": {
-        "type": "OpenApiConnection",
-        "description": "Runs only when If_alert_is_new succeeded: the row was created (or already existed). A failed Teams post or row write leaves the file for a resubmit.",
-        "runAfter": {
-          "If_alert_is_new": [
-            "Succeeded"
-          ]
-        },
-        "inputs": {
-          "host": {
-            "connectionName": "shared_onedriveforbusiness",
-            "operationId": "DeleteFile",
-            "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness"
-          },
-          "parameters": {
-            "id": "@triggerBody()?['Id']"
-          }
         }
       }
     },

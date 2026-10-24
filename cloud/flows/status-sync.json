@@ -34,44 +34,75 @@
       }
     },
     "triggers": {
-      "When_status_json_is_modified": {
-        "type": "OpenApiConnection",
-        "description": "OneDrive for Business: file modified in __ONEDRIVE_FOLDER__ (no subfolders). folderId is the folder's id (re-pick the folder after import if blank). Only status.json starts a run; calendar.json and tomorrow.json share the folder.",
-        "inputs": {
-          "host": {
-            "connectionName": "shared_onedriveforbusiness",
-            "operationId": "OnUpdatedFilesV2",
-            "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness"
-          },
-          "parameters": {
-            "folderId": "__ONEDRIVE_FOLDER_ID__",
-            "includeSubfolders": false
-          }
-        },
+      "Every_5_minutes": {
+        "type": "Recurrence",
+        "description": "Every 5 minutes. OneDrive's 'file modified' trigger doesn't fire when the sync client overwrites status.json in place, so this polls instead and exits early when the file hasn't changed.",
         "recurrence": {
           "frequency": "Minute",
-          "interval": 1
+          "interval": 5
         },
-        "splitOn": "@triggerOutputs()?['body/value']",
-        "conditions": [
-          {
-            "expression": "@equals(toLower(coalesce(triggerBody()?['Name'], '')), 'status.json')"
-          }
-        ],
         "runtimeConfiguration": {
           "concurrency": {
-            "runs": 1
+            "runs": 1,
+            "maximumWaitingRuns": 1
           }
-        },
-        "metadata": {
-          "__ONEDRIVE_FOLDER_ID__": "/OG_opossum_command"
         }
       }
     },
     "actions": {
-      "Get_status_json_content": {
+      "Get_status_metadata": {
         "type": "OpenApiConnection",
         "runAfter": {},
+        "description": "Last-modified time of status.json (the app rewrites it every 15 minutes, on run end and on quit).",
+        "inputs": {
+          "host": {
+            "connectionName": "shared_onedriveforbusiness",
+            "operationId": "GetFileMetadataByPath",
+            "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness"
+          },
+          "parameters": {
+            "path": "__ONEDRIVE_FOLDER__/status.json"
+          }
+        }
+      },
+      "If_status_unchanged": {
+        "type": "If",
+        "runAfter": {
+          "Get_status_metadata": [
+            "Succeeded"
+          ]
+        },
+        "description": "Nothing new since the last poll (6-minute window, one minute of overlap): stop here, cheaply.",
+        "expression": {
+          "and": [
+            {
+              "less": [
+                "@ticks(body('Get_status_metadata')?['LastModified'])",
+                "@ticks(addMinutes(utcNow(), -6))"
+              ]
+            }
+          ]
+        },
+        "actions": {
+          "Stop_unchanged": {
+            "type": "Terminate",
+            "runAfter": {},
+            "inputs": {
+              "runStatus": "Succeeded"
+            }
+          }
+        },
+        "else": {
+          "actions": {}
+        }
+      },
+      "Get_status_json_content": {
+        "type": "OpenApiConnection",
+        "runAfter": {
+          "If_status_unchanged": [
+            "Succeeded"
+          ]
+        },
         "inputs": {
           "host": {
             "connectionName": "shared_onedriveforbusiness",
@@ -79,7 +110,7 @@
             "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness"
           },
           "parameters": {
-            "id": "@triggerBody()?['Id']",
+            "id": "@body('Get_status_metadata')?['Id']",
             "inferContentType": false
           }
         }
@@ -551,14 +582,14 @@
                 "table": "Opossum Snapshot",
                 "item/Title": "status",
                 "item/Profile": "@take(coalesce(body('Parse_status_json')?['profile'], ''), 50)",
-                "item/GeneratedAt": "@body('Parse_status_json')?['generatedAt']",
+                "item/GeneratedAt": "@formatDateTime(body('Parse_status_json')?['generatedAt'], 'yyyy-MM-ddTHH:mm:ssZ')",
                 "item/AppVersion": "@take(coalesce(body('Parse_status_json')?['appVersion'], ''), 50)",
                 "item/CompletedToday": "@body('Parse_status_json')?['completedToday']",
                 "item/FailedCount": "@length(body('Parse_status_json')?['failed'])",
-                "item/FailedSince": "@body('Parse_status_json')?['failedSince']",
+                "item/FailedSince": "@if(empty(body('Parse_status_json')?['failedSince']), null, formatDateTime(body('Parse_status_json')?['failedSince'], 'yyyy-MM-ddTHH:mm:ssZ'))",
                 "item/NeedsAttentionCount": "@length(body('Parse_status_json')?['needsAttention'])",
                 "item/RunningNow": "@length(body('Parse_status_json')?['runningNow'])",
-                "item/NextScheduled": "@if(empty(body('Parse_status_json')?['scheduledToday']), null, first(body('Parse_status_json')?['scheduledToday'])?['at'])",
+                "item/NextScheduled": "@if(empty(body('Parse_status_json')?['scheduledToday']), null, formatDateTime(first(body('Parse_status_json')?['scheduledToday'])?['at'], 'yyyy-MM-ddTHH:mm:ssZ'))",
                 "item/NextScheduledName": "@if(empty(body('Parse_status_json')?['scheduledToday']), '', take(coalesce(first(body('Parse_status_json')?['scheduledToday'])?['workflowName'], first(body('Parse_status_json')?['scheduledToday'])?['workflow'], ''), 255))",
                 "item/RawJson": "@outputs('Raw_json_for_row')"
               }
@@ -581,14 +612,14 @@
                   "id": "@outputs('Snapshot_row')?['ID']",
                   "item/Title": "status",
                   "item/Profile": "@take(coalesce(body('Parse_status_json')?['profile'], ''), 50)",
-                  "item/GeneratedAt": "@body('Parse_status_json')?['generatedAt']",
+                  "item/GeneratedAt": "@formatDateTime(body('Parse_status_json')?['generatedAt'], 'yyyy-MM-ddTHH:mm:ssZ')",
                   "item/AppVersion": "@take(coalesce(body('Parse_status_json')?['appVersion'], ''), 50)",
                   "item/CompletedToday": "@body('Parse_status_json')?['completedToday']",
                   "item/FailedCount": "@length(body('Parse_status_json')?['failed'])",
-                  "item/FailedSince": "@body('Parse_status_json')?['failedSince']",
+                  "item/FailedSince": "@if(empty(body('Parse_status_json')?['failedSince']), null, formatDateTime(body('Parse_status_json')?['failedSince'], 'yyyy-MM-ddTHH:mm:ssZ'))",
                   "item/NeedsAttentionCount": "@length(body('Parse_status_json')?['needsAttention'])",
                   "item/RunningNow": "@length(body('Parse_status_json')?['runningNow'])",
-                  "item/NextScheduled": "@if(empty(body('Parse_status_json')?['scheduledToday']), null, first(body('Parse_status_json')?['scheduledToday'])?['at'])",
+                  "item/NextScheduled": "@if(empty(body('Parse_status_json')?['scheduledToday']), null, formatDateTime(first(body('Parse_status_json')?['scheduledToday'])?['at'], 'yyyy-MM-ddTHH:mm:ssZ'))",
                   "item/NextScheduledName": "@if(empty(body('Parse_status_json')?['scheduledToday']), '', take(coalesce(first(body('Parse_status_json')?['scheduledToday'])?['workflowName'], first(body('Parse_status_json')?['scheduledToday'])?['workflow'], ''), 255))",
                   "item/RawJson": "@outputs('Raw_json_for_row')"
                 }
