@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/branding/opossum-source.png" alt="The OG Opossum" width="180" />
+</p>
+
 # OG Opossum Command Central
 
 [![CI](https://github.com/DanielMinton/IgniteMeDammit/actions/workflows/ci.yml/badge.svg)](https://github.com/DanielMinton/IgniteMeDammit/actions/workflows/ci.yml)
