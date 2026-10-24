@@ -3,7 +3,8 @@
 One app on your phone and in Teams that shows what the work PC reported, what needs you, what people
 asked you for, and how the day went. It reads the three SharePoint lists the flows fill
 (`cloud/lists/`) and your Microsoft To Do list **Requests**. It can't start anything on the PC.
-Everything stays in your YMCA work tenant. Nothing here uses a premium connector.
+Everything stays in your work tenant. Nothing here uses a premium connector: a premium licence
+just to read my own status file would be a hard sell.
 
 | Screen | Reads | The only thing it writes |
 |---|---|---|

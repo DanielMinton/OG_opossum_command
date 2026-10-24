@@ -1,6 +1,7 @@
 # Changelog
 
-All notable changes to OG Opossum Command Central. Versions follow [SemVer](https://semver.org/).
+What changed in OG Opossum Command Central, release by release. Versions follow
+[SemVer](https://semver.org/). The ADR numbers point at `docs/DECISIONS.md` if you want the why.
 
 ## 0.3.0 — 2026-10-23
 
@@ -12,7 +13,8 @@ All notable changes to OG Opossum Command Central. Versions follow [SemVer](http
   effects" off, or a contrast theme, turns all of it off.
 - **Sounds** (ADR-057): a soft tick on clicks, two rising notes when a workflow starts, a chime when
   it completes and two low notes when it fails. Made by the app itself; nothing is downloaded.
-  Off in Settings › Look and sound; in quiet mode only failures are heard; silent while hidden.
+  Off in Settings › Look and sound; in quiet mode only failures are heard; silent while hidden,
+  because a tray app has no business chirping at you from the background.
 - **Today at a glance**: runs today, success rate, runs needing attention and the next scheduled
   workflow above the tiles. The dashboard title greets you and shows the date.
 - **Ctrl+1 to Ctrl+6** run the six tiles from any page; each tile shows its shortcut.
@@ -22,7 +24,7 @@ All notable changes to OG Opossum Command Central. Versions follow [SemVer](http
 
 ### Added
 
-- **App icon** (ADR-056): your opossum artwork, the same at every size, on the program, taskbar,
+- **App icon** (ADR-056): my opossum artwork, the same at every size, on the program, taskbar,
   window and tray, plus PNGs for the Hub in `assets/branding/`.
 
 ### Fixed
@@ -82,7 +84,7 @@ writes (`docs/POWER_AUTOMATE_FLOW.md`).
 
 ## 0.1.0 — 2026-10-23
 
-First usable release, for one person on one Windows PC, as a standard user.
+First usable release. One person, one Windows PC, a standard user account.
 
 ### Added
 
@@ -106,15 +108,15 @@ First usable release, for one person on one Windows PC, as a standard user.
   their own, anything else asks first.
 - **History** in SQLite (`data.db`) with redacted, size-bounded step output; schema migrations keep
   older databases working.
-- **Calendar** from a local JSON file written by the user's own Power Automate flow
+- **Calendar** from a local JSON file written by your own Power Automate flow
   (`docs/POWER_AUTOMATE_FLOW.md`); no sign-in, no app registration, no network.
 - **Notifications** through the tray, with a quiet mode that only lets errors through.
 - **Smoke modes** `--smoke-test` and `--smoke-ui` that never touch real data or open anything.
 
 ### Hardening (phase 6)
 
-Four adversarial reviews (security, stress correctness, accessibility, simplicity), each finding
-checked by a second reviewer before anything was fixed (ADR-041 to ADR-049).
+Four adversarial reviews (security, stress correctness, accessibility, simplicity). Every finding
+had to survive a second reviewer trying to refute it before it got fixed (ADR-041 to ADR-049).
 
 - **Security:** `cmd` scripts refuse shell metacharacters in arguments and run from the scripts
   folder (ADR-042). `windows.process.launch` refuses shells and script hosts (ADR-043). Duplicate
@@ -127,8 +129,8 @@ checked by a second reviewer before anything was fixed (ADR-041 to ADR-049).
   Opening a meeting link with no browser registered no longer crashes the app (ADR-046).
 - **Accessibility:** screen readers announce status changes and read real names for list rows,
   steps, and buttons. Font sizes are resources that scale with the system message font (whether that
-  follows the Windows Text size slider is checked by hand, docs/ACCEPTANCE.md M5.4). The dashboard scrolls and keeps Cancel
-  under the tiles. Access keys are unique, list rows show a thick focus ring, and the tray icon
+  follows the Windows Text size slider is checked by hand, docs/ACCEPTANCE.md M5.4). The dashboard
+  scrolls and keeps Cancel under the tiles. Access keys are unique, list rows show a thick focus ring, and the tray icon
   answers Enter (ADR-047).
 - **Simplicity:** dead members and a test-only presenter removed (ADR-049).
 - **Acceptance:** `docs/ACCEPTANCE.md` maps every row of spec §18 to PASS, MANUAL, or DEFERRED.

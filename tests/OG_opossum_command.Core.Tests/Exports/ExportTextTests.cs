@@ -30,7 +30,7 @@ public sealed class ExportTextTests
     }
 
     [Theory]
-    [InlineData(@"Could not find file 'C:\Users\DMinton\OneDrive - YMCA\HR\Salary review 2026.xlsx'.", "Could not find file '[path]'.")]
+    [InlineData(@"Could not find file 'C:\Users\you\OneDrive - Contoso\HR\Salary review 2026.xlsx'.", "Could not find file '[path]'.")]
     [InlineData(@"Access to the path ""\\server\share\Team A\plan b.docx"" is denied.", @"Access to the path ""[path]"" is denied.")]
     [InlineData(@"Opened %OneDriveCommercial%\OneDrive - Org\a b\c d.xlsx: locked", "Opened [path]: locked")]
     [InlineData(@"Could not find C:\Users\Someone\OneDrive - Org\a b\c d.xlsx", "Could not find [path]")]
@@ -40,7 +40,7 @@ public sealed class ExportTextTests
         var scrubbed = ExportText.Scrub(text);
 
         Assert.Equal(expected, scrubbed);
-        foreach (var leaked in new[] { "YMCA", "HR", "Salary", "review", "Org", "a b", "c d", "xlsx", "Team", "plan", "docx", "server" })
+        foreach (var leaked in new[] { "Contoso", "HR", "Salary", "review", "Org", "a b", "c d", "xlsx", "Team", "plan", "docx", "server" })
         {
             Assert.DoesNotContain(leaked, scrubbed, StringComparison.Ordinal);
         }

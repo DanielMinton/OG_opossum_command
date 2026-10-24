@@ -1,12 +1,22 @@
 #!/usr/bin/env bash
 # ══════════════════════════════════════════════════════════════════════════════
 #  OG Opossum Command Central — build.sh
-#  Concept → live production, driven by Claude Code in headless mode.
+#  Spec → installed app, built by Claude Code running headless, one phase at a time.
 #
-#  Each phase = one Claude Code session + a deterministic gate checked here
-#  (build, tests, smoke tests). Progress is saved, so a rerun resumes where it
-#  stopped. Every completed phase is a git commit + tag (phase-N) you can
-#  roll back to.
+#  Here's the deal. I wrote the spec (docs/ARCHITECTURE.md) and this harness.
+#  Claude Code writes the code, one phase per session. This script does NOT
+#  trust it: after every session it runs its own gate (build with warnings as
+#  errors, the full test suite, two headless smoke runs against a scratch data
+#  folder), and a phase only counts once that gate passes. A failed gate gets a
+#  couple of repair sessions, then the script stops and tells me what broke.
+#  Every passed phase is a git commit + tag (phase-N), so I can roll back to any
+#  of them. Progress is saved; rerunning resumes where it stopped.
+#
+#  The guardrails below are the interesting part. Standard user, no admin,
+#  no sign-ins to any tenant, no connectors, no network listeners, nothing
+#  written outside the repo. When device policy blocks something, the session
+#  writes .build/BLOCKED.md and stops instead of getting clever. On a managed
+#  work laptop "getting clever" is how you end up explaining yourself to IT.
 #
 #  HOW TO RUN
 #    Git Bash / Rider terminal set to Git Bash:   ./build.sh
@@ -20,6 +30,9 @@
 #    ./build.sh --dry-run          print what would run, change nothing
 #    ./build.sh --approve-install  pre-approve installing to your user folder
 #    ./build.sh --approve-startup  pre-approve starting at Windows sign-in
+#
+#    OGOC_SPEC=/path/to/spec.md   where phase 0 copies the spec from
+#                                 (default: the docs/ARCHITECTURE.md already here)
 #
 #  IF CLAUDE CODE IS RUNNING THIS SCRIPT FOR THE USER
 #    • Run it in the background (it takes hours); report each phase result.
@@ -77,7 +90,7 @@ MAX_BUDGET_USD="${OGOC_MAX_BUDGET_USD:-}"      # optional per-session spend cap,
 REPAIR_ATTEMPTS="${OGOC_REPAIR_ATTEMPTS:-2}"
 SMOKE_TIMEOUT=90
 DOTNET_CHANNEL="10.0"
-SPEC_SRC="${OGOC_SPEC:-/c/Users/DMinton/OneDrive - YMCA OF SAN FRANCISCO/_Inbox/OPOSSUM_CONTROL_ARCHITECTURE.md}"
+SPEC_SRC="${OGOC_SPEC:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/docs/ARCHITECTURE.md}"
 LAST_PHASE=7
 
 case "$PERMISSION_MODE" in
@@ -416,7 +429,7 @@ PHASE 5 — CALENDAR WITHOUT APP REGISTRATION (ADR-011).
 - Action m365.calendar.readFile: reads a JSON schedule file from a path configured per profile (Work default: %OneDriveCommercial%\\$APP\\calendar.json). Strict schema; tolerant of missing, stale, or mid-sync files (retry once, then show 'calendar unavailable' — never crash).
 - Dashboard: compact 'Today' panel with upcoming events; action dashboard.schedule.show.
 - The Personal profile cannot read the Work calendar path (engine allowlist) — add a test.
-- docs/POWER_AUTOMATE_FLOW.md: click-by-click steps for the USER to build the flow themselves in their YMCA work account with STANDARD connectors only (Office 365 Outlook 'Get calendar view of events (V3)' on a 15-minute recurrence → OneDrive for Business 'Create file' / 'Update file'). Include the exact JSON shape and a sample. If DLP blocks it, the feature simply stays off.
+- docs/POWER_AUTOMATE_FLOW.md: click-by-click steps for the USER to build the flow themselves in their own work account with STANDARD connectors only (Office 365 Outlook 'Get calendar view of events (V3)' on a 15-minute recurrence → OneDrive for Business 'Create file' / 'Update file'). Include the exact JSON shape and a sample. If DLP blocks it, the feature simply stays off.
 - tests/fixtures/calendar.sample.json plus tests for parsing, staleness, and a missing file.
 Do NOT create the flow, open a browser, or sign in to anything. Commit.
 EOF
@@ -483,7 +496,7 @@ phase0() {
   cd "$ROOT"
   [[ -d .git ]] || git init -q -b main
   mkdir -p docs
-  cp "$SPEC_SRC" docs/ARCHITECTURE.md
+  [[ "$SPEC_SRC" -ef docs/ARCHITECTURE.md ]] || cp "$SPEC_SRC" docs/ARCHITECTURE.md
   [[ -f .gitignore ]] || cat > .gitignore <<'EOF'
 bin/
 obj/
@@ -507,7 +520,7 @@ Pre-approved by the operator (22 Oct 2026). Format: decision · why · revisit w
 - **ADR-005 · WPF on .NET 10 LTS.** · No MSIX packaging, mature tray support, per-user deployment. · A WPF limitation blocks a needed feature.
 - **ADR-008 · SQLite for runs and history; JSON files for workflow definitions.** · Workflows stay hand-editable and diffable without an editor. · A visual editor is built.
 - **ADR-011 · Calendar via Power Automate → OneDrive JSON file.** · Works with New Outlook; no app registration or admin consent. · IT approves a Graph app registration.
-- **ADR-012 · Strict work/personal separation.** No data, tokens, or files cross the YMCA and Ohana tenants; enforced in the engine, not just the UI. · Never.
+- **ADR-012 · Strict work/personal separation.** No data, tokens, or files cross the work and personal tenants; enforced in the engine, not just the UI. · Never.
 - **ADR-013 · AI deferred.** Not part of this build. · Spec Phase 5 is started deliberately.
 EOF
   commit_phase 0

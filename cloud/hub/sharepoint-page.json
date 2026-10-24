@@ -1,6 +1,6 @@
 {
   "title": "Opossum Hub (SharePoint page fallback)",
-  "description": "Fallback Hub that needs only the SharePoint connector's 'Send an HTTP request to SharePoint' (standard). It creates one modern page, Opossum-Hub.aspx, in the Site Pages library of __SITE_URL__ with a short intro and three List web parts: Opossum Alerts (its 'Open' view: State ne Resolved, newest first), Opossum Snapshot and Opossum Wraps. Then it publishes the page. Read only: it changes no list data. YMCA work tenant only.",
+  "description": "Fallback Hub that needs only the SharePoint connector's 'Send an HTTP request to SharePoint' (standard). It creates one modern page, Opossum-Hub.aspx, in the Site Pages library of __SITE_URL__ with a short intro and three List web parts: Opossum Alerts (its 'Open' view: State ne Resolved, newest first), Opossum Snapshot and Opossum Wraps. Then it publishes the page. Read only: it changes no list data. Work tenant only.",
   "site": "__SITE_URL__",
   "prerequisites": [
     "The three lists exist on __SITE_URL__ (cloud/lists/*.json), including the Alerts list's 'Open' view, which the Alerts web part shows.",
@@ -9,7 +9,7 @@
   ],
   "placeholders": {
     "__SITE_URL__": "your personal SharePoint site URL (Site Address of every call; every uri below is relative to it)",
-    "__SITE_PATH__": "server-relative path of the site, from step 0 (body.ServerRelativeUrl), for example /personal/you_ymca_org or /sites/you",
+    "__SITE_PATH__": "server-relative path of the site, from step 0 (body.ServerRelativeUrl), for example /personal/you_contoso_com or /sites/you",
     "__LIST_ID_Alerts__ / __LIST_ID_Snapshot__ / __LIST_ID_Wraps__": "list GUIDs from steps 1-3",
     "__LIST_URL_Alerts__ / __LIST_URL_Snapshot__ / __LIST_URL_Wraps__": "server-relative list URLs from steps 1-3",
     "__LIST_WEBRELURL_Alerts__ / ...": "list URL relative to the site (the __LIST_URL_ value without __SITE_PATH__ in front)",
@@ -54,7 +54,7 @@
       "body": null,
       "capture": {
         "__LIST_ID_Alerts__": "body.Id (a GUID without braces)",
-        "__LIST_URL_Alerts__": "body.RootFolder.ServerRelativeUrl (for example /personal/you_ymca_org/Lists/Opossum Alerts)",
+        "__LIST_URL_Alerts__": "body.RootFolder.ServerRelativeUrl (for example /personal/you_contoso_com/Lists/Opossum Alerts)",
         "__LIST_WEBRELURL_Alerts__": "the same path with the site's own server-relative path cut off the front (for example /Lists/Opossum Alerts); read the site path in step 0"
       }
     },
@@ -69,7 +69,7 @@
       "body": null,
       "capture": {
         "__LIST_ID_Snapshot__": "body.Id (a GUID without braces)",
-        "__LIST_URL_Snapshot__": "body.RootFolder.ServerRelativeUrl (for example /personal/you_ymca_org/Lists/Opossum Snapshot)",
+        "__LIST_URL_Snapshot__": "body.RootFolder.ServerRelativeUrl (for example /personal/you_contoso_com/Lists/Opossum Snapshot)",
         "__LIST_WEBRELURL_Snapshot__": "the same path with the site's own server-relative path cut off the front (for example /Lists/Opossum Snapshot); read the site path in step 0"
       }
     },
@@ -84,7 +84,7 @@
       "body": null,
       "capture": {
         "__LIST_ID_Wraps__": "body.Id (a GUID without braces)",
-        "__LIST_URL_Wraps__": "body.RootFolder.ServerRelativeUrl (for example /personal/you_ymca_org/Lists/Opossum Wraps)",
+        "__LIST_URL_Wraps__": "body.RootFolder.ServerRelativeUrl (for example /personal/you_contoso_com/Lists/Opossum Wraps)",
         "__LIST_WEBRELURL_Wraps__": "the same path with the site's own server-relative path cut off the front (for example /Lists/Opossum Wraps); read the site path in step 0"
       }
     },

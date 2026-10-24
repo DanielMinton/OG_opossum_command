@@ -3,7 +3,10 @@
 OG Opossum Command Central never signs in, never calls Microsoft 365, and makes no network calls
 (ADR-011, ADR-048, ADR-053). Everything it shares with Microsoft 365 goes through **files** in one
 folder of your work OneDrive, `%OneDriveCommercial%\OG_opossum_command\`, which OneDrive syncs.
-**You** build the flows, in your own YMCA work account:
+
+Why files? Because the "proper" way is a Graph app registration, and that needs admin consent I
+don't have at work. Power Automate flows run as me, with connectors I'm already allowed to use, so
+**you** build the flows yourself, in your own work account:
 
 | Flow | Direction | File | Section |
 |---|---|---|---|
@@ -24,7 +27,7 @@ feature just stays quiet, and the app shows why in Settings → Exports or the T
 
 The **Today** panel and the `m365.calendar.readFile` action show your work calendar without any app
 registration, admin consent, or sign-in inside OG Opossum Command Central (ADR-011). Instead, **you**
-build a small flow in your own YMCA work account. Every 15 minutes it writes your upcoming events to
+build a small flow in your own work account. Every 15 minutes it writes your upcoming events to
 one JSON file in your work OneDrive, and OneDrive syncs that file to this PC. The app only **reads**
 that local file. It never signs in, never calls Microsoft 365, never downloads anything, and never
 writes `calendar.json`.
@@ -52,7 +55,7 @@ Recurrence (every 15 min)
 
 ### Before you start: the OneDrive folder
 
-1. In File Explorer, open your **work** OneDrive (the folder named like `OneDrive - YMCA OF SAN FRANCISCO`).
+1. In File Explorer, open your **work** OneDrive (the folder named like `OneDrive - <Your Org>`).
 2. Create a folder named exactly `OG_opossum_command`.
 3. Right-click the folder and choose **Always keep on this device**. The app never opens an
    online-only placeholder, because opening one would make OneDrive download it. If the folder isn't
@@ -63,8 +66,8 @@ The app looks for `%OneDriveCommercial%\OG_opossum_command\calendar.json` by def
 
 ### Build the flow, click by click
 
-Portal labels change from time to time. If a name below doesn't match exactly, look for the closest
-one. The JSON at the end of this page is the part that must be exact.
+Microsoft renames things in the portal whenever it feels like it. If a name below doesn't match
+exactly, look for the closest one. The JSON at the end of this page is the part that must be exact.
 
 1. Go to Power Automate in your browser (signed in with your work account, as usual) and choose
    **Create → Scheduled cloud flow**.
@@ -110,9 +113,9 @@ one. The JSON at the end of this page is the part that must be exact.
    }
    ```
 
-   If the designer turns the `events` line into a quoted string, delete it, put the cursor after
-   `"events": `, open **Expression**, type `body('Select')` and click **Add**. `events` must be a JSON
-   **array**, not text.
+   The designer loves to "help" here. If it turns the `events` line into a quoted string, delete it,
+   put the cursor after `"events": `, open **Expression**, type `body('Select')` and click **Add**.
+   `events` must be a JSON **array**, not text.
 7. **+ New step** → `OneDrive for Business` → **Update file**.
    - **File:** browse to `/OG_opossum_command/calendar.json`. On the very first build the file doesn't
      exist yet, so type the path `/OG_opossum_command/calendar.json`.
@@ -242,7 +245,7 @@ The same file is used by the tests: `tests/fixtures/calendar.sample.json`.
 ### If DLP or policy blocks the flow
 
 If saving the flow fails with a data loss prevention (DLP) message, or a connector is unavailable,
-don't look for a workaround. The calendar feature stays off, the Today panel says why, and every
+don't look for a workaround. It's annoying as hell, but it's IT's call, not yours. The calendar feature stays off, the Today panel says why, and every
 other part of the app works the same. Ask IT only if you want the feature; the flow uses nothing
 beyond the standard Office 365 Outlook and OneDrive for Business connectors.
 

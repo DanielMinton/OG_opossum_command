@@ -1,0 +1,40 @@
+# Same gate build.sh runs locally, minus the parts that need a real desktop session:
+# warnings are errors, every test runs, then the headless self-check.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build (warnings are errors)
+        run: dotnet build OG_opossum_command.slnx -c Debug -warnaserror
+
+      - name: Test
+        run: dotnet test OG_opossum_command.slnx -c Debug --no-build --blame-hang-timeout 2m
+
+      - name: Smoke test (headless, throwaway data folder)
+        shell: bash
+        run: |
+          export OGOC_DATA_DIR="$RUNNER_TEMP/ogoc-smoke"
+          exe=src/OG_opossum_command.Desktop/bin/Debug/net10.0-windows/OG_opossum_command.exe
+          rc=0; out=$(timeout 120 "$exe" --smoke-test) || rc=$?
+          echo "$out"
+          exit $rc

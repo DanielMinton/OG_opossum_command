@@ -1,11 +1,12 @@
 # SharePoint lists
 
-Three custom lists (BaseTemplate 100) on your personal SharePoint site (`__SITE_URL__`), in your YMCA
-work tenant only. The flows find them by display name. Each `*.json` here describes the columns, where
+Three custom lists (BaseTemplate 100) on your personal SharePoint site (`__SITE_URL__`), in your work
+tenant only. The flows find them by display name. Each `*.json` here describes the columns, where
 each value comes from (`source`), and the ordered `spRestCreate` calls. Send those calls one by one, in
 order, with the SharePoint connector's **Send an HTTP request to SharePoint** (standard). Use
 `spRestDefaultHeaders` on every call and add the per-call `headers` where given (index/unique changes
-are `MERGE`s). A field is indexed before it is made unique, as SharePoint requires.
+are `MERGE`s). A field is indexed before it is made unique, because SharePoint insists on that
+order.
 
 | List | Written by | Row key | Kept |
 |---|---|---|---|

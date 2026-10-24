@@ -128,8 +128,7 @@ path-like input and are expanded **at run time**, so a file can be shared betwee
 |---|---|---|
 | `url` | string | Absolute `http://` or `https://` URL with a host. Anything else (`file:`, `javascript:`, `ms-settings:`, a bare domain) is rejected at load time and refused again at run time. |
 
-Idempotent. Default timeout 15 s. Hands the URL to the user's default browser; nothing is fetched by
-the app.
+Idempotent. Default timeout 15 s. Hands the URL to your default browser; the app fetches nothing.
 
 ### `windows.folder.open` — Open folder
 
@@ -169,7 +168,8 @@ bounds as `windows.process.launch`); the script's working directory is the scrip
 non-zero exit fails the step with `exit-code`. If PowerShell refuses the script because of the
 PC's **execution policy**, the step fails with `execution-policy-blocked` and a message that says so
 and lists the options (ask IT, or write the script as `.cmd`). The app never passes
-`-ExecutionPolicy` and never changes policy (rule 2). cmd cannot use a network (UNC) folder as its
+`-ExecutionPolicy` and never changes policy (rule 2); a tray app quietly working around IT's
+policy is exactly the kind of thing that gets software banned from a work PC. cmd cannot use a network (UNC) folder as its
 current folder, so a cmd script refuses to run when the data folder is on a `\\server\share` path.
 
 ### `m365.calendar.readFile` — Read calendar file

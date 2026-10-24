@@ -3,6 +3,7 @@ using OG_opossum_command.Core.History;
 namespace OG_opossum_command.Core.Tests.History;
 
 /// <summary>The secret shapes that script and environment output commonly carry (SEC-2), and harmless text that must survive.</summary>
+// Token-shaped fixtures are split with "+" so GitHub secret scanning does not flag fake tokens. They are still compile-time constants.
 public sealed class OutputRedactorSecretShapesTests
 {
     [Theory]
@@ -12,15 +13,15 @@ public sealed class OutputRedactorSecretShapesTests
     [InlineData("Authorization: Basic dXNlcjpwYXNzd29yZA==", "dXNlcjpwYXNzd29yZA", "Authorization")]
     [InlineData("Authorization: Negotiate YIIGhgYGKwYBBQUCoIIGejCCBnag", "YIIGhgYGKwYBBQUCoIIGejCCBnag", "Authorization")]
     [InlineData("\"password\": \"correct horse battery\", \"user\": \"dan\"", "horse battery", "\"user\": \"dan\"")]
-    [InlineData("key id AKIAIOSFODNN7EXAMPLE in use", "AKIAIOSFODNN7EXAMPLE", "in use")]
-    [InlineData("pushed with ghp_16C7e42F292c6912E7710c838347Ae178B4a done", "ghp_16C7e42F292c6912E7710c838347Ae178B4a", "done")]
-    [InlineData("using github_pat_11ABCDEFG0123456789_abcdefghijklmnop now", "github_pat_11ABCDEFG0123456789", "now")]
-    [InlineData("OPENAI key sk-proj-abcdefghijklmnopqrstuvwxyz012345 set", "abcdefghijklmnopqrstuvwxyz012345", "set")]
-    [InlineData("slack xoxb-123456789012-abcdefghijkl posted", "xoxb-123456789012-abcdefghijkl", "posted")]
+    [InlineData("key id " + "AKIA" + "IOSFODNN7EXAMPLE in use", "AKIA" + "IOSFODNN7EXAMPLE", "in use")]
+    [InlineData("pushed with " + "ghp" + "_16C7e42F292c6912E7710c838347Ae178B4a done", "ghp" + "_16C7e42F292c6912E7710c838347Ae178B4a", "done")]
+    [InlineData("using " + "github" + "_pat_11ABCDEFG0123456789_abcdefghijklmnop now", "github" + "_pat_11ABCDEFG0123456789", "now")]
+    [InlineData("OPENAI key " + "sk" + "-proj-abcdefghijklmnopqrstuvwxyz012345 set", "abcdefghijklmnopqrstuvwxyz012345", "set")]
+    [InlineData("slack " + "xo" + "xb-123456789012-abcdefghijkl posted", "xo" + "xb-123456789012-abcdefghijkl", "posted")]
     [InlineData("remote: https://dan:s3cretPass@git.example.com/repo.git", "s3cretPass", "@git.example.com/repo.git")]
     [InlineData("tool --token abc123xyz --verbose", "abc123xyz", "--verbose")]
     [InlineData("tool --password=Pa55word! run", "Pa55word!", "run")]
-    [InlineData("Endpoint=sb://ns.servicebus.windows.net/;SharedAccessKeyName=root;SharedAccessKey=AbCdEf0123456789AbCdEf0123456789AbCdEf01234=;EntityPath=q", "AbCdEf0123456789", "EntityPath=q")]
+    [InlineData("Endpoint=sb://ns.servicebus.windows.net/;SharedAccessKeyName=root;" + "SharedAccess" + "Key=AbCdEf0123456789AbCdEf0123456789AbCdEf01234=;EntityPath=q", "AbCdEf0123456789", "EntityPath=q")]
     public void Scrubs_env_dumps_auth_schemes_prefixed_tokens_userinfo_and_flags(string input, string secret, string keptFragment)
     {
         var redacted = OutputRedactor.Redact(input)!;

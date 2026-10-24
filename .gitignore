@@ -10,3 +10,23 @@ artifacts/
 *.db-shm
 TestResults/
 .claude/worktrees/
+
+# Secrets and local config. Nothing in this repo needs any of these; they're here so nobody
+# (me included) commits one by accident at 1 a.m.
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+*.snk
+*.pem
+*.key
+secrets.json
+appsettings.*.local.json
+*.local.json
+*.pubxml.user
+*.publishsettings
+launchSettings.json
+
+# Local data the app writes when OGOC_DATA_DIR points inside the repo
+*.log

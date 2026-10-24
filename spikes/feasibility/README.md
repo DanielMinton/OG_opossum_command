@@ -1,10 +1,11 @@
 # Feasibility spike (throwaway)
 
-One project only: `Spike/Spike.csproj`. Not referenced from `src/`. Proves, as a standard
-user on this PC, that the stack behind OG Opossum Command Central works.
+One project only: `Spike/Spike.csproj`. Nothing in `src/` references it. It exists to prove, as a
+standard user on this PC, that the stack behind OG Opossum Command Central works before I bet a whole build
+on it. It's throwaway code; don't copy from it.
 
-Run everything from the repo root in Git Bash. Package restore uses the repo-root `nuget.config` (ADR-015). `OGOC_DATA_DIR` is irrelevant to the spike;
-it writes only under `%LOCALAPPDATA%\OG_opossum_command-spike` and deletes that folder itself.
+Run everything from the repo root in Git Bash. Package restore uses the repo-root `nuget.config` (ADR-015). `OGOC_DATA_DIR` doesn't matter here;
+the spike writes only under `%LOCALAPPDATA%\OG_opossum_command-spike` and deletes that folder itself.
 
 ```bash
 # (a) build
@@ -26,7 +27,7 @@ dotnet publish spikes/feasibility/Spike/Spike.csproj -c Release -r win-x64 --sel
 ls "$LOCALAPPDATA/OG_opossum_command-spike" 2>&1   # expect: No such file or directory
 ```
 
-Verified `--check` output on this PC (22 Oct 2026, ~3 s wall time, exit 0; identical from `dotnet run` and from the published exe):
+What `--check` printed on this PC (22 Oct 2026, ~3 s wall time, exit 0; identical from `dotnet run` and from the published exe):
 
 ```
 PASS process.echo: stdout='hi' stderr-length=0 exit=0
@@ -36,4 +37,4 @@ ALL CHECKS PASSED
 ```
 
 If any step shows a policy message (AppLocker, WDAC, SmartScreen, Defender), record it in
-`docs/FEASIBILITY.md` as a FAIL with the exact text. Never work around it.
+`docs/FEASIBILITY.md` as a FAIL with the exact text. Never work around it. If IT blocks it, that's the answer.

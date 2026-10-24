@@ -1,5 +1,12 @@
 # ⛧ OPOSSUM CONTROL ⛧
 
+> [!NOTE]
+> **Read this first.** This is the spec I wrote before building anything. It's deliberately bigger than what
+> got built: a separate host process, Graph sign-in, AI planning, remote control. I wanted the whole shape on
+> paper so I'd know which seams to keep while I cut features. "OPOSSUM CONTROL" is the old name; the app
+> shipped as OG Opossum Command Central (code name `OG_opossum_command`). Where the build went a different
+> way, and why, is in [docs/DECISIONS.md](DECISIONS.md). This is the plan, not the receipt.
+
 > **A Windows-first cognitive-support command center**  
 > **Architecture & Engineering Specification · Draft v0.1 · 22 October 2026**  
 > *Less friction. Fewer decisions. Reliable execution.*
@@ -7,7 +14,7 @@
 ---
 
 > [!IMPORTANT]
-> **Design principle:** OPOSSUM CONTROL is a personal tool intended to reduce executive-function load, context switching, repetitive work, and operational uncertainty. It is **not** a generic AI agent that improvises unrestricted actions. Reliability, comprehensibility, privacy, and low-friction interaction outrank feature count.
+> **Design principle:** OPOSSUM CONTROL is a personal tool to cut executive-function load, context switching, repetitive work, and operational uncertainty. It is **not** a generic AI agent that improvises unrestricted actions. Reliability, comprehensibility, privacy, and low-friction interaction outrank feature count.
 
 ## Document status
 
@@ -16,7 +23,7 @@
 | Project | OPOSSUM CONTROL |
 | Status | Architecture proposal — not implemented |
 | Primary platform | Windows 11, standard-user context |
-| Primary audience | Individual operator; optional future YMCA Urban Services deployment |
+| Primary audience | Me; maybe a rollout at work later |
 | Proposed core | C# / supported .NET LTS, background user-mode host |
 | User interface | WPF or WinUI 3; React/WebView2 still possible |
 | Local persistence | SQLite; protected secrets in Windows-backed storage |
@@ -51,7 +58,7 @@
 
 # 01 · Mission, user outcomes, and operating philosophy
 
-**Problem:** Repetitive workflows and context shifts impose a disproportionate cognitive cost. The operator should not need to repeatedly reconstruct the same sequence of windows, clicks, context, and decisions.
+**Problem:** Repetitive workflows and context shifts impose a disproportionate cognitive cost. I shouldn't have to rebuild the same sequence of windows, clicks, context, and decisions over and over.
 
 **Solution:** A programmable Windows command center that maps small, intentional interactions to safe, observable, reversible-where-possible workflows. The interface should offer a compact, stable surface; the execution engine should perform the actual work.
 
@@ -61,7 +68,7 @@
 - Time from intention to completed task.
 - Frequency and duration of context switches.
 - Failures requiring manual recovery.
-- User confidence in knowing *what ran, what changed, and what remains*.
+- How sure I am about *what ran, what changed, and what remains*.
 - Accessibility and predictability under distraction, overload, or interrupted attention.
 
 ### Product invariants
@@ -370,7 +377,7 @@ Do not claim unattended desktop interaction after sign-out. A Windows Service is
 
 `System.Diagnostics.Process` should configure executable, argument list, working directory, environment, stdout/stderr redirection, timeout, exit code, and cancellation/termination semantics. Treat shell invocation and PowerShell as **explicit trusted-action categories**, not universal fallback primitives.
 
-Windows UI Automation requires an interactive session, suitable access/integrity levels, stable control identifiers, and robust focus handling. A workflow that manipulates the foreground UI should report that it requires an unlocked interactive session and may interrupt user activity. Use selective screenshots or redacted accessibility metadata for debugging only with clear consent and data classification.
+Windows UI Automation requires an interactive session, suitable access/integrity levels, stable control identifiers, and careful focus handling. A workflow that manipulates the foreground UI should report that it requires an unlocked interactive session and may interrupt user activity. Use selective screenshots or redacted accessibility metadata for debugging only with clear consent and data classification.
 
 ---
 
@@ -438,7 +445,7 @@ flowchart LR
 
 **Work vs personal:** separate profile-owned workflows, action allowlists, credential namespaces, storage paths where justified, export permissions, and AI destination rules. Encryption under the same Windows identity is not equivalent to isolation between mutually distrustful processes; enterprise isolation requires stronger policy and may require IT-approved storage and identity architecture.
 
-**Organizational deployment:** signed releases, approved installation, documented permissions, supply-chain review, incident and update procedure, and privacy-aware telemetry should precede YMCA-wide deployment. No endpoint-policy bypass.
+**Organizational deployment:** signed releases, approved installation, documented permissions, supply-chain review, incident and update procedure, and privacy-aware telemetry should come before any rollout at work. No endpoint-policy bypass.
 
 ---
 
@@ -524,7 +531,7 @@ The dashboard must tolerate late events, host restarts, dropped connections, and
 
 Define before release: current/target version, database schema migration, rollback strategy, atomic binary replacement where feasible, host shutdown coordination, and export/backup of critical workflow definitions. Never mutate an active executable or SQLite schema in an uncontrolled update.
 
-## Possible future YMCA distribution
+## Possible future rollout at work
 
 Assess IT approval, code signing, organizational licensing, security review, Entra app registration, Intune or approved software distribution, user-consent policies, data handling, and support ownership. The personal edition should not presume those approvals exist. A managed policy layer can be introduced later if enforcement hooks exist in the command and action boundaries from the start.
 
@@ -628,7 +635,7 @@ Do not select by appearance alone. Compare startup time, package size, no-admin 
 | Accessibility | Keyboard access, visible focus, adequate contrast, reduced motion |
 | Managed deployment | Actual approved target environment verified, not assumed |
 
-**Definition of done for initial usable release:** One high-value real workflow executes from a tile; the operator receives unmistakable status, can cancel it, can inspect redacted history, and can recover predictably from a failure—without administrator installation on a machine that permits the software.
+**Definition of done for initial usable release:** One high-value real workflow executes from a tile; I get unmistakable status, can cancel it, can inspect redacted history, and can recover predictably from a failure—without administrator installation on a machine that permits the software.
 
 ---
 
@@ -701,10 +708,10 @@ These need empirical validation, not abstract argument:
 2. Is a two-process architecture worth its IPC/process-supervision cost immediately, or would one tray-resident application meet the actual lifecycle need?
 3. On an approved target workstation, are self-contained .NET executables, child-process launch, and required runtimes allowed?
 4. Which UI implementation demonstrably yields the simplest usable interface—WPF, WinUI 3, or WebView2?
-5. Which five existing workflows produce the greatest actual reduction in user effort?
+5. Which five existing workflows actually save me the most effort?
 6. Which Microsoft Graph scopes can be authorized in the development and future organizational tenants?
 7. Which data classifications may be retained in logs or sent to approved model providers?
-8. Are scheduled actions allowed to interrupt the foreground desktop, and how should the user veto or postpone them?
+8. Are scheduled actions allowed to interrupt the foreground desktop, and how do I veto or postpone them?
 9. What are acceptable retry, cancellation, and manual-review behaviors for each action type?
 10. How will releases and database upgrades be recovered if an update is interrupted?
 
@@ -712,7 +719,7 @@ These need empirical validation, not abstract argument:
 
 ## Final engineering position
 
-**Build the reliable local execution system first; allow the interface to evolve around it.** A C#/.NET Windows-first host is well matched to your operating-system and Microsoft integration requirements. WPF and WinUI 3 are both viable; Tauri/Rust offers cross-platform value only if portability becomes a substantive requirement. A web UI can control local tasks through an approved local host, but adding an authenticated network portal now creates complexity without solving a current necessity.
+**Build the reliable local execution system first; allow the interface to evolve around it.** A C#/.NET Windows-first host is a good match for my operating-system and Microsoft integration requirements. WPF and WinUI 3 are both viable; Tauri/Rust offers cross-platform value only if portability becomes a substantive requirement. A web UI can control local tasks through an approved local host, but adding an authenticated network portal now creates complexity without solving a current necessity.
 
 The core product should be **small, durable, understandable, and permission-aware**: a few high-value actions, clear state, durable execution history, and dependable recovery. Enterprise readiness begins with sound boundaries and authorized deployment—not an enterprise-sized first release.
 

@@ -1,6 +1,8 @@
 # Feasibility report — OG Opossum Command Central
 
-Phase 1 of the build (spec §17 "Phase 0 · Feasibility gate"), run 22 Oct 2026 on this PC.
+Phase 1 of the build (spec §17 "Phase 0 · Feasibility gate"), run 22 Oct 2026 on this PC. Before writing any
+real code I wanted proof that this machine, under my employer's policies, would let me build, launch, kill and publish a .NET tray
+app without admin rights. Better to find out on day one than after phase 9.
 
 - Ran as a **standard user**: process integrity level `Medium Mandatory Level` (S-1-16-8192); no elevation requested, no UAC prompt shown.
 - Windows 11 Pro, version 10.0.26300.9711. .NET SDK 10.0.402 (per-user install under `%LOCALAPPDATA%\Microsoft\dotnet`). Git Bash.
@@ -21,13 +23,13 @@ Phase 1 of the build (spec §17 "Phase 0 · Feasibility gate"), run 22 Oct 2026 
 
 ## Observations (not restrictions, nothing worked around)
 
-- **Package restore failed at first with NU1100 for every package.** Cause: the user-level `%APPDATA%\NuGet\nuget.config` on this PC has an empty `<packageSources>` list. This is not an employer policy: the file is user-writable, dated 16 Oct 2026, there is no machine-level config under `C:\ProgramData\NuGet`, and `https://api.nuget.org/v3/index.json` answers HTTP 200 anonymously. Fix: a repo-root `nuget.config` that lists nuget.org (ADR-015). Nothing outside the project root was changed.
-- The spike written in the earlier, tool-less session needed one compile fix: `using System.IO;` (the WPF SDK's implicit usings omit `System.IO`). `System.Drawing.SystemIcons.Application` compiled and rendered without any extra package.
-- The spike's stderr capture was added so the echo check reports both streams, as spec §17 Phase 0 asks.
-- `%LOCALAPPDATA%\OG_opossum_command-spike` is created and deleted by the spike itself on every `--check`; it was confirmed absent at the end of the session.
+- **Package restore failed at first with NU1100 for every package.** On a managed PC that smells like policy. It wasn't: the user-level `%APPDATA%\NuGet\nuget.config` on this PC just has an empty `<packageSources>` list. It's not an employer policy: the file is user-writable, dated 16 Oct 2026, there is no machine-level config under `C:\ProgramData\NuGet`, and `https://api.nuget.org/v3/index.json` answers HTTP 200 anonymously. Fix: a repo-root `nuget.config` that lists nuget.org (ADR-015). I changed nothing outside the project root.
+- The spike from the earlier, tool-less session needed one compile fix: `using System.IO;` (the WPF SDK's implicit usings leave out `System.IO`). `System.Drawing.SystemIcons.Application` compiled and rendered without any extra package.
+- I added stderr capture to the spike so the echo check reports both streams, as spec §17 Phase 0 asks.
+- The spike creates and deletes `%LOCALAPPDATA%\OG_opossum_command-spike` itself on every `--check`; I confirmed it was gone at the end of the session.
 
 ## Verdict
 
-Local execution, child-process control, SQLite persistence under the per-user data root, the WPF tray runtime, and self-contained per-user publishing are all viable on this PC as a standard user.
+Local execution, child-process control, SQLite persistence under the per-user data root, the WPF tray runtime, and self-contained per-user publishing all work on this PC as a standard user. Green light.
 
 RESULT: PASS
