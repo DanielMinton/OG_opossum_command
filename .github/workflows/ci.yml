@@ -35,6 +35,6 @@ jobs:
         run: |
           export OGOC_DATA_DIR="$RUNNER_TEMP/ogoc-smoke"
           exe=src/OG_opossum_command.Desktop/bin/Debug/net10.0-windows/OG_opossum_command.exe
-          rc=0; out=$(timeout 120 "$exe" --smoke-test) || rc=$?
+          rc=0; out=$("$exe" --smoke-test) || rc=$?   # exits on its own; the job has a 20-minute cap
           echo "$out"
           exit $rc

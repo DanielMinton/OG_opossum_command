@@ -1,4 +1,4 @@
-# Acceptance — OG Opossum Command Central 0.2.0
+# Acceptance — OG Opossum Command Central 0.3.0
 
 This is where I hold the build to its own spec. Every row of spec §18 (docs/ARCHITECTURE.md) lands in one of
 three buckets:
@@ -9,7 +9,7 @@ three buckets:
 
 Test names are `Class.Method` in `tests/OG_opossum_command.Core.Tests`. Both smoke modes (`--smoke-test`, `--smoke-ui`) also pass. They never open anything and never touch your real data.
 
-Status on 2026-10-23 (0.2.0, phases 8-9): 396 tests passed, 0 failed. Phase 8-9 added 102 (exports, carryovers, alert outbox). 0.1.0 had 294.
+Status on 2026-10-24 (0.3.0): 469 tests passed, 0 failed. 0.2.1 and 0.3.0 (icon, accessibility fixes, the cloud contract tests, motion and sound) took it from 396 to 469. At 0.2.0 (phases 8-9) it was 396 passed, 0 failed. Phase 8-9 added 102 (exports, carryovers, alert outbox). 0.1.0 had 294.
 
 | # | §18 test | Pass condition | Status | Evidence |
 |:--|:--|:--|:--|:--|
