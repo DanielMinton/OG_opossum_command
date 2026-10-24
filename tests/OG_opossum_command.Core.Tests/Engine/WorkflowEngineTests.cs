@@ -153,13 +153,15 @@ public sealed class WorkflowEngineTests : IDisposable
     {
         // A .cmd running ping -n 30 127.0.0.1: cmd is the launched process, ping is its child (rule 7 allows these throwaways).
         // cmd.exe itself may not be started with windows.process.launch, so the script action provides the tree.
-        _root.WriteScript(ProfileId.Work, "ping.cmd", "@ping -n 30 127.0.0.1\r\n");
+        // Not "ping.cmd" calling a bare "ping": cmd can resolve "ping" to the script itself (current folder first), and
+        // a batch file that runs a batch file without CALL never returns, so it loops forever and ping never starts.
+        _root.WriteScript(ProfileId.Work, "ping-tree.cmd", "@\"%SystemRoot%\\System32\\ping.exe\" -n 30 127.0.0.1\r\n");
         var real = new LauncherSet(new WindowsProcessLauncher(), _launchers.Urls, _launchers.Folders, _launchers.Dashboard);
         var registry = ActionRegistry.CreateDefault(real);
         using var engine = new WorkflowEngine(registry, _history);
         var profile = _root.Profile(ProfileId.Work, registry);
         var workflow = TestSupport.LoadValid(registry, profile, Workflow(
-            """{ "id": "ping", "action": "windows.script.run", "inputs": { "interpreter": "cmd", "script": "ping.cmd" } }"""));
+            """{ "id": "ping", "action": "windows.script.run", "inputs": { "interpreter": "cmd", "script": "ping-tree.cmd" } }"""));
 
         var pingsBefore = TestSupport.PingPids();
         var started = engine.Start(workflow, profile);
